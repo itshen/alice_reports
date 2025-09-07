@@ -81,12 +81,17 @@ class NotificationService:
             # 构建消息内容
             message_title = title or "智能信息分析报告"
             
-            # 金山协作机器人消息格式（根据实际API调整）
+            # 如果有标题，将标题和内容组合为Markdown格式
+            if title:
+                full_content = f"## {message_title}\n\n{content}"
+            else:
+                full_content = content
+            
+            # 金山协作机器人消息格式（使用Markdown格式以支持更丰富的展示）
             data = {
-                "msg_type": "rich_text",
-                "content": {
-                    "title": message_title,
-                    "text": content
+                "msgtype": "markdown",
+                "markdown": {
+                    "text": full_content
                 }
             }
             
@@ -122,7 +127,7 @@ class NotificationService:
         
         # 截取前部分内容并添加省略提示
         truncated = report_content[:max_length-100]
-        return truncated + "\n\n...\n\n*内容过长，已截取部分内容*"
+        return truncated + "\n\n> **提示：** *内容过长，已截取部分内容，完整报告请查看系统后台*"
     
     def format_deep_research_for_notification(self, report_content: str) -> str:
         """格式化深度研究报告用于通知"""
@@ -162,27 +167,41 @@ class NotificationService:
         
         # 添加查看完整报告的提示
         notification_lines.append("\n---")
-        notification_lines.append("*这是报告摘要，完整报告请查看系统后台*")
+        notification_lines.append("> **提示：** *这是报告摘要，完整报告请查看系统后台*")
         
         result = '\n'.join(notification_lines)
         
         # 确保不超过长度限制
         max_length = 2000
         if len(result) > max_length:
-            result = result[:max_length-50] + "\n\n*内容已截取*"
+            result = result[:max_length-80] + "\n\n> **提示：** *内容已截取*"
         
         return result
     
     def test_webhook(self, notification_type: str, webhook_url: str) -> Dict:
         """测试Webhook连接"""
         try:
-            test_message = f"这是来自智能信息分析平台的测试消息\n\n发送时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            # 为不同平台优化测试消息格式
+            if notification_type == 'jinshan':
+                test_message = f"""这是来自 **智能信息分析平台** 的测试消息
+
+> **发送时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+**功能特性：**
+- ✅ 智能爬虫监控
+- ✅ 自动报告生成  
+- ✅ 多平台推送
+
+---
+*测试成功，系统运行正常！*"""
+            else:
+                test_message = f"这是来自智能信息分析平台的测试消息\n\n发送时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             
             success = self.send_notification(
                 notification_type=notification_type,
                 webhook_url=webhook_url,
                 content=test_message,
-                title="测试消息"
+                title="🔔 系统测试消息"
             )
             
             if success:

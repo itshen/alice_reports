@@ -190,7 +190,7 @@ function dashboardApp() {
                 }
             } else {
                 contentElement = document.getElementById(page + '-content');
-                apiUrl = `/${page}`;
+                apiUrl = `/${page}?dashboard=1`;
             }
             
             if (!contentElement) return;

@@ -177,7 +177,11 @@ def test_llm_connection():
 @login_required
 def crawler_config_list():
     """爬虫配置列表页"""
-    # 重定向到 Dashboard
+    # 如果是Dashboard请求，返回页面内容
+    if request.args.get('dashboard') == '1':
+        crawlers = CrawlerConfig.query.order_by(CrawlerConfig.created_at.desc()).all()
+        return render_template('crawler_config_list.html', crawlers=crawlers)
+    # 否则重定向到 Dashboard
     return redirect('/dashboard#crawler-config')
 
 @app.route('/crawler-config/new')
@@ -425,7 +429,11 @@ def test_crawling():
 @login_required
 def report_config_list():
     """报告配置列表页"""
-    # 重定向到 Dashboard
+    # 如果是Dashboard请求，返回页面内容
+    if request.args.get('dashboard') == '1':
+        reports = ReportConfig.query.order_by(ReportConfig.created_at.desc()).all()
+        return render_template('report_config_list.html', reports=reports)
+    # 否则重定向到 Dashboard
     return redirect('/dashboard#report-config')
 
 @app.route('/report-config/new')

@@ -148,91 +148,16 @@ window.navigateToCrawlerNew = function() {
     window.location.hash = 'crawler-config-new';
 }
 
+// 页面导航函数
 window.navigateToCrawlerEdit = function(crawlerId) {
     window.location.hash = `crawler-config-edit-${crawlerId}`;
-}
-
-window.runCrawlerOnce = async function(crawlerId) {
-    try {
-        const response = await fetch(`/api/crawler-config/${crawlerId}/run-once`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast('爬虫任务已启动，请稍后查看结果', 'success');
-        } else {
-            showToast(result.message || '启动失败', 'error');
-        }
-    } catch (error) {
-        console.error('启动爬虫失败:', error);
-        showToast('启动失败，请重试', 'error');
-    }
 }
 
 window.viewCrawlerResults = function(crawlerId) {
     window.location.href = `/dashboard#crawler-results-${crawlerId}`;
 }
 
-window.deleteCrawler = async function(crawlerId) {
-    if (!confirm('确定要删除这个爬虫配置吗？此操作不可恢复。')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/crawler-config/${crawlerId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast('删除成功', 'success');
-            // 刷新页面
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
-        } else {
-            showToast(result.message || '删除失败', 'error');
-        }
-    } catch (error) {
-        console.error('删除爬虫失败:', error);
-        showToast('删除失败，请重试', 'error');
-    }
-}
-
-window.toggleCrawlerStatus = async function(crawlerId, isActive) {
-    try {
-        const response = await fetch(`/api/crawler-config/${crawlerId}/toggle`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ is_active: isActive })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast(isActive ? '爬虫已启用' : '爬虫已禁用', 'success');
-        } else {
-            showToast(result.message || '状态更新失败', 'error');
-            // 恢复开关状态
-            event.target.checked = !isActive;
-        }
-    } catch (error) {
-        console.error('更新爬虫状态失败:', error);
-        showToast('状态更新失败，请重试', 'error');
-        // 恢复开关状态
-        event.target.checked = !isActive;
-    }
-}
+// 注意：其他函数（runCrawlerOnce, deleteCrawler, toggleCrawlerStatus）
+// 已在Dashboard中全局定义，这里不需要重复定义
 </script>
 {% endblock %}

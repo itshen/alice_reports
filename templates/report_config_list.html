@@ -147,7 +147,7 @@
 </div>
 
 <script>
-// 导航函数
+// 页面导航函数
 window.navigateToReportNew = function() {
     window.location.hash = 'report-config-new';
 }
@@ -156,82 +156,7 @@ window.navigateToReportEdit = function(reportId) {
     window.location.hash = `report-config-edit-${reportId}`;
 }
 
-// 全局函数定义
-window.generateReportOnce = async function generateReportOnce(reportId) {
-    try {
-        const response = await fetch(`/api/report-config/${reportId}/generate-once`, {
-            method: 'POST'
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast('报告生成任务已启动', 'success');
-        } else {
-            showToast(result.message || '启动失败', 'error');
-        }
-    } catch (error) {
-        console.error('启动报告生成失败:', error);
-        showToast('启动失败，请重试', 'error');
-    }
-}
-
-window.deleteReport = async function deleteReport(reportId) {
-    if (!confirm('确定要删除这个报告配置吗？此操作不可恢复。')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/report-config/${reportId}`, {
-            method: 'DELETE'
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast('报告配置已删除', 'success');
-            // 刷新页面
-            window.location.reload();
-        } else {
-            showToast(result.message || '删除失败', 'error');
-        }
-    } catch (error) {
-        console.error('删除报告失败:', error);
-        showToast('删除失败，请重试', 'error');
-    }
-}
-
-// 全局函数定义
-window.toggleReportStatus = async function toggleReportStatus(reportId, isActive) {
-            try {
-                const response = await fetch(`/api/report-config/${reportId}/toggle`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ is_active: isActive })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showToast(isActive ? '报告已开启' : '报告已关闭', 'success');
-                    // 刷新页面以更新状态显示
-                    setTimeout(() => window.location.reload(), 1000);
-                } else {
-                    showToast(result.message || '操作失败', 'error');
-                    // 恢复开关状态
-                    const checkbox = event.target;
-                    checkbox.checked = !isActive;
-                }
-            } catch (error) {
-                console.error('切换报告状态失败:', error);
-                showToast('操作失败，请重试', 'error');
-                // 恢复开关状态
-                const checkbox = event.target;
-                checkbox.checked = !isActive;
-            }
-}
-// 页面脚本已移至Dashboard全局定义
+// 注意：其他函数（generateReportOnce, deleteReport, toggleReportStatus）
+// 已在Dashboard中全局定义，这里不需要重复定义
 </script>
 {% endblock %}
