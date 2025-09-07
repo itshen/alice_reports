@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}
+{{ crawler.name }} - 抓取结果 - 智能信息分析平台
+{% endblock %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-6xl mx-auto px-4">
+        <!-- 页面标题 -->
+        <div class="mb-6">
+            <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+                <a href="{{ url_for('crawler_config_list') }}" class="hover:text-gray-700">爬虫配置</a>
+                <span>/</span>
+                <span>{{ crawler.name }}</span>
+                <span>/</span>
+                <span>抓取结果</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">{{ crawler.name }} - 抓取结果</h1>
+                    <p class="text-gray-600 mt-1">最近50条抓取记录</p>
+                </div>
+                <div class="flex space-x-3">
+                    <a href="{{ url_for('crawler_config_edit', crawler_id=crawler.id) }}" class="btn-secondary">
+                        编辑配置
+                    </a>
+                    <a href="{{ url_for('crawler_config_list') }}" class="btn-primary">
+                        返回列表
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow card-shadow p-4">
+                <div class="text-sm font-medium text-gray-500">总记录数</div>
+                <div class="text-2xl font-bold text-gray-900">{{ records|length }}</div>
+            </div>
+            <div class="bg-white rounded-lg shadow card-shadow p-4">
+                <div class="text-sm font-medium text-gray-500">成功抓取</div>
+                <div class="text-2xl font-bold text-green-600">{{ records|selectattr('status', 'equalto', 'success')|list|length }}</div>
+            </div>
+            <div class="bg-white rounded-lg shadow card-shadow p-4">
+                <div class="text-sm font-medium text-gray-500">失败记录</div>
+                <div class="text-2xl font-bold text-red-600">{{ records|selectattr('status', 'equalto', 'failed')|list|length }}</div>
+            </div>
+            <div class="bg-white rounded-lg shadow card-shadow p-4">
+                <div class="text-sm font-medium text-gray-500">最后运行</div>
+                <div class="text-sm text-gray-900">
+                    {% if crawler.last_run %}
+                        {{ crawler.last_run.strftime('%Y-%m-%d %H:%M') }}
+                    {% else %}
+                        从未运行
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 抓取结果列表 -->
+        <div class="bg-white rounded-lg shadow card-shadow">
+            {% if records %}
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">抓取记录</h3>
+            </div>
+            <div class="divide-y divide-gray-200">
+                {% for record in records %}
+                <div class="p-6">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                    {% if record.status == 'success' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                    {% if record.status == 'success' %}成功{% else %}失败{% endif %}
+                                </span>
+                                <span class="text-xs text-gray-500">
+                                    {{ record.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                </span>
+                            </div>
+                            
+                            {% if record.status == 'success' %}
+                                <h4 class="text-lg font-medium text-gray-900 mb-2">
+                                    {{ record.title or '无标题' }}
+                                </h4>
+                                <p class="text-sm text-blue-600 break-all mb-2">
+                                    <a href="{{ record.url }}" target="_blank" class="hover:underline">
+                                        {{ record.url }}
+                                    </a>
+                                </p>
+                                {% if record.author %}
+                                <p class="text-sm text-gray-600 mb-1">
+                                    <span class="font-medium">作者：</span>{{ record.author }}
+                                </p>
+                                {% endif %}
+                                {% if record.publish_date %}
+                                <p class="text-sm text-gray-600 mb-2">
+                                    <span class="font-medium">发布时间：</span>{{ record.publish_date.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                                {% endif %}
+                                {% if record.content %}
+                                <div class="mt-3 p-3 bg-gray-50 rounded-lg">
+                                    <div class="text-sm font-medium text-gray-700 mb-1">内容摘要：</div>
+                                    <div class="text-sm text-gray-600">
+                                        {{ record.content[:300] }}{% if record.content|length > 300 %}...{% endif %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% else %}
+                                <h4 class="text-lg font-medium text-gray-900 mb-2">抓取失败</h4>
+                                <p class="text-sm text-blue-600 break-all mb-2">
+                                    {{ record.url }}
+                                </p>
+                                {% if record.error_message %}
+                                <div class="mt-2 p-3 bg-red-50 rounded-lg">
+                                    <div class="text-sm font-medium text-red-700 mb-1">错误信息：</div>
+                                    <div class="text-sm text-red-600">{{ record.error_message }}</div>
+                                </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">暂无抓取记录</h3>
+                <p class="mt-1 text-sm text-gray-500">还没有执行过爬虫任务</p>
+                <div class="mt-6">
+                    <a href="{{ url_for('crawler_config_list') }}" class="btn-primary">
+                        返回爬虫列表
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

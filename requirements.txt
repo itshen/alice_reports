@@ -1,0 +1,7 @@
+Flask
+Flask-SQLAlchemy
+APScheduler
+crawl4ai
+requests
+python-dotenv
+Werkzeug

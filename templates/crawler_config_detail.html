@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if crawler %}编辑爬虫配置{% else %}新建爬虫配置{% endif %} - 智能信息分析平台
+{% endblock %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-4xl mx-auto px-4" x-data="crawlerConfigApp()">
+        <!-- 页面标题 -->
+        <div class="mb-6">
+            <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+                <a href="{{ url_for('crawler_config_list') }}" class="hover:text-gray-700">爬虫配置</a>
+                <span>/</span>
+                <span>{% if crawler %}编辑配置{% else %}新建配置{% endif %}</span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                {% if crawler %}编辑爬虫配置{% else %}新建爬虫配置{% endif %}
+            </h1>
+        </div>
+
+        <div class="bg-white rounded-lg shadow card-shadow p-6">
+            <form @submit.prevent="saveCrawler()" class="space-y-6">
+                <!-- 基本信息 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                            爬虫名称 <span class="text-red-500">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="name" 
+                            name="name" 
+                            x-model="config.name"
+                            required
+                            class="form-input"
+                            placeholder="例如：科技新闻监控"
+                        >
+                    </div>
+
+                    <div>
+                        <label for="frequency_seconds" class="block text-sm font-medium text-gray-700 mb-2">
+                            执行频率（秒） <span class="text-red-500">*</span>
+                        </label>
+                        <input 
+                            type="number" 
+                            id="frequency_seconds" 
+                            name="frequency_seconds" 
+                            x-model="config.frequency_seconds"
+                            min="30"
+                            max="604800"
+                            required
+                            class="form-input"
+                            placeholder="3600"
+                        >
+                    </div>
+                </div>
+
+                <!-- 网站配置 -->
+                <div>
+                    <label for="list_url" class="block text-sm font-medium text-gray-700 mb-2">
+                        信息列表页URL <span class="text-red-500">*</span>
+                    </label>
+                    <div class="flex space-x-2">
+                        <input 
+                            type="url" 
+                            id="list_url" 
+                            name="list_url" 
+                            x-model="config.list_url"
+                            required
+                            class="form-input flex-1"
+                            placeholder="https://example.com/news"
+                        >
+                        <button 
+                            type="button"
+                            @click="testConnection()"
+                            :disabled="!config.list_url || testingConnection"
+                            class="btn-secondary whitespace-nowrap"
+                        >
+                            <span x-text="testingConnection ? '测试中...' : '测试连接'">测试连接</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- URL提取规则 -->
+                <div x-show="pageContent" x-transition class="space-y-4">
+                    <h3 class="text-lg font-medium text-gray-900">详情页URL提取规则</h3>
+                    
+                    <!-- 页面内容预览 -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            页面内容预览
+                        </label>
+                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                            <pre class="text-xs text-gray-600 whitespace-pre-wrap" x-text="pageContent"></pre>
+                        </div>
+                    </div>
+
+                    <!-- 正则表达式配置 -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            <label for="url_regex" class="block text-sm font-medium text-gray-700 mb-2">
+                                URL正则表达式 <span class="text-red-500">*</span>
+                            </label>
+                            <div class="space-y-2">
+                                <textarea 
+                                    id="url_regex" 
+                                    name="url_regex" 
+                                    x-model="config.url_regex"
+                                    @input="updatePreviewUrls()"
+                                    required
+                                    rows="3"
+                                    class="form-textarea"
+                                    placeholder='例如：href="([^"]*article[^"]*)"'
+                                ></textarea>
+                                <div class="space-y-2">
+                                    <input 
+                                        type="text" 
+                                        x-model="aiRegexRequirement"
+                                        placeholder="描述你想匹配的链接类型，例如：新闻详情页、文章页面、包含日期的链接等"
+                                        class="form-input text-sm"
+                                    >
+                                    <button 
+                                        type="button"
+                                        @click="generateRegexWithAi()"
+                                        :disabled="!pageContent || generatingRegex"
+                                        class="inline-flex items-center px-3 py-1 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 rounded-md border border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                        </svg>
+                                        <span x-text="generatingRegex ? 'AI生成中...' : 'AI生成正则'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                预览待抓取URL列表
+                            </label>
+                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-40 overflow-y-auto">
+                                <div x-show="safePreviewUrls.length === 0" class="text-gray-500 text-sm">
+                                    请输入正则表达式以预览URL
+                                </div>
+                                <div x-show="safePreviewUrls.length > 0" class="space-y-1">
+                                    <div class="text-sm font-medium text-gray-700 mb-2">
+                                        找到 <span x-text="safePreviewUrls.length"></span> 个URL：
+                                    </div>
+                                    <template x-for="(url, index) in safePreviewUrls" :key="url">
+                                        <div x-show="index < 10" class="text-xs text-blue-600 break-all" x-text="url"></div>
+                                    </template>
+                                    <div x-show="safePreviewUrls.length > 10" class="text-xs text-gray-500">
+                                        ... 还有 <span x-text="safePreviewUrls.length - 10"></span> 个URL
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 测试按钮 -->
+                            <div x-show="safePreviewUrls.length > 0" class="mt-3">
+                                <button 
+                                    type="button"
+                                    @click="testCrawling()"
+                                    :disabled="testingCrawling"
+                                    class="inline-flex items-center px-4 py-2 text-sm bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 rounded-md border border-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span x-text="testingCrawling ? '测试中...' : '测试抓取'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 测试结果显示区域 -->
+                    <div x-show="testResults.length > 0" x-transition class="mt-6">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">抓取测试结果</h3>
+                        <div class="space-y-4">
+                            <template x-for="(result, index) in testResults" :key="index">
+                                <div class="bg-white border border-gray-200 rounded-lg p-4">
+                                    <div class="flex items-start justify-between mb-2">
+                                        <div class="flex-1">
+                                            <h4 class="text-sm font-medium text-gray-900" x-text="result.title || '无标题'"></h4>
+                                            <p class="text-xs text-blue-600 break-all mt-1" x-text="result.url"></p>
+                                        </div>
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                              :class="result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                              x-text="result.success ? '成功' : '失败'">
+                                        </span>
+                                    </div>
+                                    <div x-show="result.success" class="mt-2">
+                                        <div x-show="result.author" class="text-xs text-gray-600 mb-1">
+                                            作者：<span x-text="result.author"></span>
+                                        </div>
+                                        <div x-show="result.date" class="text-xs text-gray-600 mb-1">
+                                            时间：<span x-text="result.date"></span>
+                                        </div>
+                                        <div x-show="result.content" class="text-xs text-gray-700 bg-gray-50 p-2 rounded mt-2">
+                                            <div class="font-medium mb-1">内容摘要：</div>
+                                            <div x-text="result.content.substring(0, 200) + (result.content.length > 200 ? '...' : '')"></div>
+                                        </div>
+                                    </div>
+                                    <div x-show="!result.success && result.error" class="mt-2">
+                                        <div class="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                            错误：<span x-text="result.error"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a 
+                        href="{{ url_for('crawler_config_list') }}" 
+                        class="btn-secondary"
+                    >
+                        取消
+                    </a>
+                    <button 
+                        type="submit" 
+                        :disabled="loading || safePreviewUrls.length === 0"
+                        class="btn-primary"
+                        :class="safePreviewUrls.length === 0 ? 'opacity-50 cursor-not-allowed' : ''"
+                    >
+                        <span x-text="loading ? '保存中...' : '保存'">保存</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI推测正则表达式模态框已移除 -->
+</div>
+
+<script>
+window.crawlerConfigApp = function crawlerConfigApp() {
+    return {
+        config: {
+            id: {{ crawler.id if crawler else 'null' }},
+            name: {{ (crawler.name if crawler else "") | tojson }},
+            list_url: {{ (crawler.list_url if crawler else "") | tojson }},
+            url_regex: {{ (crawler.url_regex if crawler else "") | tojson }},
+            frequency_seconds: {{ crawler.frequency_seconds if crawler else 3600 }}
+        },
+        pageContent: '',
+        previewUrls: [],
+        loading: false,
+        testingConnection: false,
+        generatingRegex: false,
+        aiRegexRequirement: '',
+        testingCrawling: false,
+        testResults: [],
+        
+        get safePreviewUrls() {
+            return Array.isArray(this.previewUrls) ? this.previewUrls : [];
+        },
+        
+        init() {
+            // 如果是编辑模式且有URL，自动测试连接
+            if (this.config.list_url && this.config.id) {
+                this.testConnection();
+            }
+        },
+        
+        async testConnection() {
+            if (!this.config.list_url) {
+                showToast('请先输入URL', 'warning');
+                return;
+            }
+            
+            this.testingConnection = true;
+            
+            try {
+                const response = await fetch('/api/crawler-config/0/test-connection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: this.config.list_url })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.pageContent = result.content;
+                    showToast('连接测试成功', 'success');
+                    
+                    // 如果已有正则表达式，自动预览URL
+                    if (this.config.url_regex) {
+                        this.updatePreviewUrls();
+                    }
+                } else {
+                    showToast(result.message || '连接测试失败', 'error');
+                }
+            } catch (error) {
+                console.error('测试连接失败:', error);
+                showToast('连接测试失败，请检查网络', 'error');
+            } finally {
+                this.testingConnection = false;
+            }
+        },
+        
+        async updatePreviewUrls() {
+            if (!this.config.url_regex || !this.pageContent) {
+                this.previewUrls = [];
+                return;
+            }
+            
+            // 前端验证正则表达式
+            try {
+                new RegExp(this.config.url_regex);
+            } catch (e) {
+                console.error('前端正则表达式验证失败:', e, '正则表达式:', this.config.url_regex);
+                this.previewUrls = [];
+                showToast(`正则表达式语法错误: ${e.message}`, 'error');
+                return;
+            }
+            
+            try {
+                console.log('发送预览请求，正则表达式:', this.config.url_regex);
+                
+                const response = await fetch('/api/crawler-config/preview-urls', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        content: this.pageContent,
+                        regex: this.config.url_regex
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.previewUrls = Array.isArray(result.urls) ? result.urls : [];
+                } else {
+                    this.previewUrls = [];
+                    showToast(result.message || '正则表达式错误', 'error');
+                }
+            } catch (error) {
+                console.error('预览URL失败:', error);
+                this.previewUrls = [];
+                showToast('预览失败，请重试', 'error');
+            }
+        },
+        
+        async generateRegexWithAi() {
+            if (!this.pageContent) {
+                showToast('请先测试连接获取页面内容', 'warning');
+                return;
+            }
+            
+            this.generatingRegex = true;
+            
+            try {
+                // 调用后端API生成正则表达式
+                const response = await fetch('/api/crawler-config/generate-regex', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        content: this.pageContent,
+                        url: this.config.list_url,
+                        requirement: this.aiRegexRequirement || '匹配文章详情页链接'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.config.url_regex = result.regex;
+                    showToast('AI正则表达式已生成，请测试效果', 'success');
+                    
+                    // 自动预览URL
+                    this.updatePreviewUrls();
+                } else {
+                    showToast(result.message || 'AI生成失败', 'error');
+                }
+                
+            } catch (error) {
+                console.error('AI生成正则表达式失败:', error);
+                showToast('AI生成失败，请重试', 'error');
+            } finally {
+                this.generatingRegex = false;
+            }
+        },
+        
+        async testCrawling() {
+            if (this.safePreviewUrls.length === 0) {
+                showToast('没有可测试的URL', 'warning');
+                return;
+            }
+            
+            this.testingCrawling = true;
+            this.testResults = [];
+            
+            try {
+                // 只测试前5个URL，避免测试时间过长
+                const urlsToTest = this.safePreviewUrls.slice(0, 5);
+                
+                const response = await fetch('/api/crawler-config/test-crawling', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        urls: urlsToTest,
+                        base_url: this.config.list_url
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.testResults = result.results;
+                    showToast(`测试完成，成功抓取 ${result.results.filter(r => r.success).length} 个页面`, 'success');
+                } else {
+                    showToast(result.message || '测试失败', 'error');
+                }
+                
+            } catch (error) {
+                console.error('测试抓取失败:', error);
+                showToast('测试失败，请重试', 'error');
+            } finally {
+                this.testingCrawling = false;
+            }
+        },
+        
+        async saveCrawler() {
+            if (this.safePreviewUrls.length === 0) {
+                showToast('请确保正则表达式能匹配到URL', 'warning');
+                return;
+            }
+            
+            this.loading = true;
+            
+            try {
+                const response = await fetch('/api/crawler-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(this.config)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('保存成功', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/crawler-config';
+                    }, 1000);
+                } else {
+                    showToast(result.message || '保存失败', 'error');
+                }
+            } catch (error) {
+                console.error('保存失败:', error);
+                showToast('保存失败，请重试', 'error');
+            } finally {
+                this.loading = false;
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

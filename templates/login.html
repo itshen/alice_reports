@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}登录 - 智能信息分析平台{% endblock %}
+
+{% block body %}
+<div class="min-h-screen flex items-center justify-center gradient-bg">
+    <div class="max-w-md w-full space-y-8 p-8">
+        <div class="bg-white rounded-xl shadow-2xl p-8">
+            <!-- Logo和标题 -->
+            <div class="text-center mb-8">
+                <div class="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
+                    <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-3xl font-bold text-gray-900">智能信息分析平台</h2>
+                <p class="mt-2 text-gray-600">请登录您的账户</p>
+            </div>
+
+            <!-- 登录表单 -->
+            <form method="POST" class="space-y-6" x-data="loginForm()">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                        用户名
+                    </label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        value="admin"
+                        required 
+                        class="form-input"
+                        placeholder="请输入用户名"
+                        x-model="username"
+                    >
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                        密码
+                    </label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        value="admin123"
+                        required 
+                        class="form-input"
+                        placeholder="请输入密码"
+                        x-model="password"
+                    >
+                </div>
+
+                <div>
+                    <button 
+                        type="submit" 
+                        class="w-full btn-primary py-3 text-lg"
+                        :disabled="loading"
+                        x-text="loading ? '登录中...' : '登录'"
+                    ></button>
+                </div>
+            </form>
+
+            <!-- 默认账户提示 -->
+            <div class="mt-6 text-center">
+                <div class="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                    <p class="font-medium">默认账户信息：</p>
+                    <p>用户名：admin</p>
+                    <p>密码：admin123</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loginForm() {
+    return {
+        username: 'admin',
+        password: 'admin123',
+        loading: false,
+        
+        init() {
+            // 初始化逻辑
+        }
+    }
+}
+</script>
+{% endblock %}

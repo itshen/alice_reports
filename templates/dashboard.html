@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+
+{% block title %}控制台 - 智能信息分析平台{% endblock %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-50" x-data="dashboardApp()">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="px-6 py-4">
+            <div class="flex justify-between items-center">
+                <!-- Logo和标题 -->
+                <div class="flex items-center space-x-3">
+                    <div class="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <h1 class="text-xl font-semibold text-gray-900">智能信息分析平台</h1>
+                </div>
+                
+                <!-- 用户信息 -->
+                <div class="flex items-center space-x-4">
+                    <span class="text-gray-700">{{ session.username }}</span>
+                    <a href="{{ url_for('logout') }}" class="text-gray-500 hover:text-gray-700 transition-colors">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex">
+        <!-- 左侧菜单栏 -->
+        <aside class="w-64 bg-white shadow-sm min-h-screen">
+            <nav class="p-4 space-y-2">
+                <a 
+                    href="#" 
+                    @click="currentPage = 'global-settings'"
+                    :class="currentPage === 'global-settings' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-gray-700 hover:bg-gray-50'"
+                    class="flex items-center space-x-3 px-3 py-2 rounded-lg border transition-colors"
+                >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    <span>全局设置</span>
+                </a>
+
+                <a 
+                    href="#" 
+                    @click="currentPage = 'crawler-config'"
+                    :class="currentPage === 'crawler-config' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-gray-700 hover:bg-gray-50'"
+                    class="flex items-center space-x-3 px-3 py-2 rounded-lg border transition-colors"
+                >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                    <span>爬虫配置</span>
+                </a>
+
+                <a 
+                    href="#" 
+                    @click="currentPage = 'report-config'"
+                    :class="currentPage === 'report-config' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-gray-700 hover:bg-gray-50'"
+                    class="flex items-center space-x-3 px-3 py-2 rounded-lg border transition-colors"
+                >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <span>报告配置</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="flex-1 p-6">
+            <!-- 全局设置页面 -->
+            <div x-show="currentPage === 'global-settings'" x-transition>
+                <div id="global-settings-content">
+                    <div class="flex justify-center items-center h-64">
+                        <div class="text-gray-500">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 爬虫配置页面 -->
+            <div x-show="currentPage === 'crawler-config'" x-transition>
+                <div id="crawler-config-content">
+                    <div class="flex justify-center items-center h-64">
+                        <div class="text-gray-500">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 爬虫配置详情页面 -->
+            <div x-show="currentPage.startsWith('crawler-config-')" x-transition>
+                <div id="crawler-config-detail-content">
+                    <div class="flex justify-center items-center h-64">
+                        <div class="text-gray-500">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 报告配置页面 -->
+            <div x-show="currentPage === 'report-config'" x-transition>
+                <div id="report-config-content">
+                    <div class="flex justify-center items-center h-64">
+                        <div class="text-gray-500">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 报告配置详情页面 -->
+            <div x-show="currentPage.startsWith('report-config-')" x-transition>
+                <div id="report-config-detail-content">
+                    <div class="flex justify-center items-center h-64">
+                        <div class="text-gray-500">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function dashboardApp() {
+    return {
+        currentPage: 'global-settings',
+        
+        init() {
+            // 检查URL hash来确定初始页面
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                this.currentPage = hash;
+            }
+            
+            // 监听页面切换
+            this.$watch('currentPage', (newPage) => {
+                this.loadPageContent(newPage);
+                // 更新URL hash
+                window.location.hash = newPage;
+            });
+            
+            // 监听浏览器前进后退
+            window.addEventListener('hashchange', () => {
+                const newHash = window.location.hash.substring(1);
+                if (newHash && newHash !== this.currentPage) {
+                    this.currentPage = newHash;
+                }
+            });
+            
+            // 初始加载
+            this.loadPageContent(this.currentPage);
+        },
+        
+        async loadPageContent(page) {
+            // 处理特殊页面类型
+            let contentElement, apiUrl;
+            
+            if (page.startsWith('crawler-config-')) {
+                contentElement = document.getElementById('crawler-config-detail-content');
+                if (page === 'crawler-config-new') {
+                    apiUrl = '/api/crawler-config/new-form';
+                } else if (page.startsWith('crawler-config-edit-')) {
+                    const crawlerId = page.replace('crawler-config-edit-', '');
+                    apiUrl = `/api/crawler-config/${crawlerId}/edit-form`;
+                }
+            } else if (page.startsWith('report-config-')) {
+                contentElement = document.getElementById('report-config-detail-content');
+                if (page === 'report-config-new') {
+                    apiUrl = '/api/report-config/new-form';
+                } else if (page.startsWith('report-config-edit-')) {
+                    const reportId = page.replace('report-config-edit-', '');
+                    apiUrl = `/api/report-config/${reportId}/edit-form`;
+                }
+            } else {
+                contentElement = document.getElementById(page + '-content');
+                apiUrl = `/${page}`;
+            }
+            
+            if (!contentElement) return;
+            
+            try {
+                contentElement.innerHTML = '<div class="flex justify-center items-center h-64"><div class="text-gray-500">加载中...</div></div>';
+                
+                const response = await fetch(apiUrl);
+                const html = await response.text();
+                
+                // 提取页面内容（去掉完整的HTML结构）
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const mainContent = doc.querySelector('main') || doc.querySelector('.container') || doc.body;
+                
+                contentElement.innerHTML = mainContent.innerHTML;
+                
+                // 执行页面中的脚本并重新初始化Alpine.js
+                const scripts = contentElement.querySelectorAll('script');
+                console.log('找到脚本数量:', scripts.length);
+                scripts.forEach((script, index) => {
+                    try {
+                        console.log(`执行脚本 ${index + 1}:`, script.textContent.substring(0, 100) + '...');
+                        // 使用Function构造函数在全局作用域中执行
+                        const func = new Function(script.textContent);
+                        func();
+                    } catch (error) {
+                        console.error('执行脚本失败:', error);
+                    }
+                });
+                
+                // 重新初始化Alpine.js组件 - 添加延迟确保脚本执行完成
+                setTimeout(() => {
+                    if (window.Alpine) {
+                        console.log('重新初始化Alpine.js');
+                        window.Alpine.initTree(contentElement);
+                    }
+                }, 100);
+                
+            } catch (error) {
+                console.error('加载页面内容失败:', error);
+                contentElement.innerHTML = '<div class="text-red-500 text-center">加载失败，请刷新重试</div>';
+            }
+        }
+    }
+}
+
+// 全局函数定义 - 直接在Dashboard中定义，避免动态加载问题
+window.saveSettings = async function saveSettings() {
+    console.log('saveSettings函数被调用');
+    
+    const form = document.getElementById('global-settings-form');
+    if (!form) {
+        console.error('未找到表单元素');
+        showToast('表单未找到，请刷新页面重试', 'error');
+        return;
+    }
+    
+    const formData = new FormData(form);
+    const saveBtn = document.getElementById('save-settings-btn');
+    
+    if (!saveBtn) {
+        console.error('未找到保存按钮');
+        return;
+    }
+    
+    console.log('开始保存设置...');
+    saveBtn.textContent = '保存中...';
+    saveBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/global-settings', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('设置已成功保存', 'success');
+        } else {
+            showToast(result.message || '保存失败', 'error');
+        }
+    } catch (error) {
+        console.error('保存设置失败:', error);
+        showToast('保存失败，请重试', 'error');
+    } finally {
+        saveBtn.textContent = '保存设置';
+        saveBtn.disabled = false;
+    }
+}
+
+window.testConnection = async function testConnection() {
+    const apiKey = document.getElementById('llm_api_key').value;
+    const testBtn = document.getElementById('test-connection-btn');
+    
+    if (!apiKey) {
+        showToast('请先填写API Key', 'warning');
+        return;
+    }
+    
+    testBtn.textContent = '测试中...';
+    testBtn.disabled = true;
+    
+    try {
+        // 收集表单数据
+        const formData = new FormData();
+        formData.append('llm_provider', document.getElementById('llm_provider').value);
+        formData.append('llm_base_url', document.getElementById('llm_base_url').value);
+        formData.append('llm_api_key', document.getElementById('llm_api_key').value);
+        formData.append('llm_model_name', document.getElementById('llm_model_name').value);
+        
+        const response = await fetch('/api/test-llm-connection', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(result.message, 'success');
+        } else {
+            showToast(result.message || '连接测试失败', 'error');
+        }
+    } catch (error) {
+        console.error('测试连接失败:', error);
+        showToast('网络错误，请重试', 'error');
+    } finally {
+        testBtn.textContent = '测试连接';
+        testBtn.disabled = false;
+    }
+}
+
+window.toggleCrawlerStatus = async function toggleCrawlerStatus(crawlerId, isActive) {
+    try {
+        const response = await fetch(`/api/crawler-config/${crawlerId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ is_active: isActive })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(isActive ? '爬虫已开启' : '爬虫已关闭', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(result.message || '操作失败', 'error');
+            const checkbox = event.target;
+            checkbox.checked = !isActive;
+        }
+    } catch (error) {
+        console.error('切换爬虫状态失败:', error);
+        showToast('操作失败，请重试', 'error');
+        const checkbox = event.target;
+        checkbox.checked = !isActive;
+    }
+}
+
+window.runCrawlerOnce = async function runCrawlerOnce(crawlerId) {
+    try {
+        const response = await fetch(`/api/crawler-config/${crawlerId}/run-once`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('爬虫已启动，请稍后查看结果', 'success');
+        } else {
+            showToast(result.message || '启动失败', 'error');
+        }
+    } catch (error) {
+        console.error('启动爬虫失败:', error);
+        showToast('启动失败，请重试', 'error');
+    }
+}
+
+window.deleteCrawler = async function deleteCrawler(crawlerId) {
+    if (!confirm('确定要删除这个爬虫配置吗？此操作不可恢复。')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/crawler-config/${crawlerId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('爬虫配置已删除', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(result.message || '删除失败', 'error');
+        }
+    } catch (error) {
+        console.error('删除爬虫失败:', error);
+        showToast('删除失败，请重试', 'error');
+    }
+}
+
+window.toggleReportStatus = async function toggleReportStatus(reportId, isActive) {
+    try {
+        const response = await fetch(`/api/report-config/${reportId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ is_active: isActive })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(isActive ? '报告已开启' : '报告已关闭', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(result.message || '操作失败', 'error');
+            const checkbox = event.target;
+            checkbox.checked = !isActive;
+        }
+    } catch (error) {
+        console.error('切换报告状态失败:', error);
+        showToast('操作失败，请重试', 'error');
+        const checkbox = event.target;
+        checkbox.checked = !isActive;
+    }
+}
+
+window.generateReportOnce = async function generateReportOnce(reportId) {
+    try {
+        const response = await fetch(`/api/report-config/${reportId}/generate-once`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('报告生成已启动，请稍后查看结果', 'success');
+        } else {
+            showToast(result.message || '启动失败', 'error');
+        }
+    } catch (error) {
+        console.error('启动报告生成失败:', error);
+        showToast('启动失败，请重试', 'error');
+    }
+}
+
+window.deleteReport = async function deleteReport(reportId) {
+    if (!confirm('确定要删除这个报告配置吗？此操作不可恢复。')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/report-config/${reportId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('报告配置已删除', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(result.message || '删除失败', 'error');
+        }
+    } catch (error) {
+        console.error('删除报告失败:', error);
+        showToast('删除失败，请重试', 'error');
+    }
+}
+
+// 导航函数
+window.navigateToCrawlerNew = function() {
+    // 通过修改hash来触发页面切换
+    window.location.hash = 'crawler-config-new';
+}
+
+window.navigateToCrawlerEdit = function(crawlerId) {
+    // 通过修改hash来触发页面切换
+    window.location.hash = `crawler-config-edit-${crawlerId}`;
+}
+
+window.navigateToReportNew = function() {
+    // 通过修改hash来触发页面切换
+    window.location.hash = 'report-config-new';
+}
+
+window.navigateToReportEdit = function(reportId) {
+    // 通过修改hash来触发页面切换
+    window.location.hash = `report-config-edit-${reportId}`;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if report %}编辑报告配置{% else %}新建报告配置{% endif %} - 智能信息分析平台
+{% endblock %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-6xl mx-auto px-4" x-data="reportConfigApp()">
+        <!-- 页面标题 -->
+        <div class="mb-6">
+            <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+                <a href="{{ url_for('report_config_list') }}" class="hover:text-gray-700">报告配置</a>
+                <span>/</span>
+                <span>{% if report %}编辑配置{% else %}新建配置{% endif %}</span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                {% if report %}编辑报告配置{% else %}新建报告配置{% endif %}
+            </h1>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 左侧标签页 -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-lg shadow card-shadow">
+                    <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex">
+                            <button 
+                                @click="activeTab = 'config'"
+                                :class="activeTab === 'config' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm"
+                            >
+                                报告配置
+                            </button>
+                            <button 
+                                @click="activeTab = 'history'"
+                                :class="activeTab === 'history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm"
+                            >
+                                历史记录
+                            </button>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧内容区 -->
+            <div class="lg:col-span-2">
+                <!-- 报告配置标签页 -->
+                <div x-show="activeTab === 'config'" x-transition class="bg-white rounded-lg shadow card-shadow p-6">
+                    <form @submit.prevent="saveReport()" class="space-y-6">
+                        <!-- 基本信息 -->
+                        <div class="space-y-4">
+                            <h3 class="text-lg font-medium text-gray-900">基本信息</h3>
+                            
+                            <div>
+                                <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                                    报告名称 <span class="text-red-500">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="name" 
+                                    name="name" 
+                                    x-model="config.name"
+                                    required
+                                    class="form-input"
+                                    placeholder="例如：每日AI新闻速递"
+                                >
+                            </div>
+
+                            <div>
+                                <label for="purpose" class="block text-sm font-medium text-gray-700 mb-2">
+                                    报告的目的
+                                </label>
+                                <textarea 
+                                    id="purpose" 
+                                    name="purpose" 
+                                    x-model="config.purpose"
+                                    rows="3"
+                                    class="form-textarea"
+                                    placeholder="描述这个报告的目的和用途..."
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <!-- 数据源配置 -->
+                        <div class="border-t border-gray-200 pt-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">数据源配置</h3>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                                        数据源 <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                                        {% for crawler in crawlers %}
+                                        <label class="flex items-center">
+                                            <input 
+                                                type="checkbox" 
+                                                value="{{ crawler.id }}"
+                                                x-model="config.data_sources"
+                                                class="form-checkbox h-4 w-4 text-blue-600"
+                                            >
+                                            <span class="ml-2 text-sm text-gray-700">{{ crawler.name }}</span>
+                                            <span class="ml-auto text-xs text-gray-500">{{ crawler.list_url[:30] }}...</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                    {% if not crawlers %}
+                                    <p class="text-sm text-gray-500">暂无可用的爬虫数据源，请先创建爬虫配置。</p>
+                                    {% endif %}
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="filter_keywords" class="block text-sm font-medium text-gray-700 mb-2">
+                                            过滤关键词
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="filter_keywords" 
+                                            name="filter_keywords" 
+                                            x-model="config.filter_keywords"
+                                            class="form-input"
+                                            placeholder="人工智能,大模型,AGI"
+                                        >
+                                        <p class="text-xs text-gray-500 mt-1">多个关键词用逗号隔开</p>
+                                    </div>
+
+                                    <div>
+                                        <label for="time_range" class="block text-sm font-medium text-gray-700 mb-2">
+                                            时间范围
+                                        </label>
+                                        <select 
+                                            id="time_range" 
+                                            name="time_range" 
+                                            x-model="config.time_range"
+                                            class="form-select"
+                                        >
+                                            <option value="24h">最近24小时</option>
+                                            <option value="3d">最近3天</option>
+                                            <option value="7d">最近7天</option>
+                                            <option value="30d">最近30天</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 深度研究配置 -->
+                        <div class="border-t border-gray-200 pt-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">智能分析配置</h3>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            x-model="config.enable_deep_research"
+                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                        >
+                                        <span class="ml-2 text-sm font-medium text-gray-700">开启自动化深度研究</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mt-1 ml-6">
+                                        启用后，系统将使用AI进行深度分析和研究，生成更详细的报告
+                                    </p>
+                                </div>
+
+                                <div x-show="config.enable_deep_research" x-transition>
+                                    <label for="research_focus" class="block text-sm font-medium text-gray-700 mb-2">
+                                        报告的侧重点 <span class="text-red-500">*</span>
+                                    </label>
+                                    <textarea 
+                                        id="research_focus" 
+                                        name="research_focus" 
+                                        x-model="config.research_focus"
+                                        :required="config.enable_deep_research"
+                                        rows="4"
+                                        class="form-textarea"
+                                        :class="config.enable_deep_research ? 'ring-2 ring-blue-500 border-blue-500' : ''"
+                                        placeholder="请详细描述AI应该如何分析和研究这些信息，例如：&#10;&#10;请深入研究Nano Banana的技术特点、与主流模型（如Midjourney, DALL-E 3）的优劣势对比、定价策略、开发者社区反馈以及潜在的应用场景。最终形成一份综合评估报告。"
+                                    ></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 推送配置 -->
+                        <div class="border-t border-gray-200 pt-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">推送配置</h3>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="notification_type" class="block text-sm font-medium text-gray-700 mb-2">
+                                        机器人类型
+                                    </label>
+                                    <select 
+                                        id="notification_type" 
+                                        name="notification_type" 
+                                        x-model="config.notification_type"
+                                        class="form-select"
+                                    >
+                                        <option value="wechat">企业微信</option>
+                                        <option value="jinshan">金山协作</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for="webhook_url" class="block text-sm font-medium text-gray-700 mb-2">
+                                        Webhook URL
+                                    </label>
+                                    <input 
+                                        type="url" 
+                                        id="webhook_url" 
+                                        name="webhook_url" 
+                                        x-model="config.webhook_url"
+                                        class="form-input"
+                                        placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <button 
+                                    type="button"
+                                    @click="testWebhook()"
+                                    :disabled="!config.webhook_url || testingWebhook"
+                                    class="btn-secondary text-sm"
+                                >
+                                    <span x-text="testingWebhook ? '测试中...' : '测试推送'">测试推送</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                            <a 
+                                href="{{ url_for('report_config_list') }}" 
+                                class="btn-secondary"
+                            >
+                                取消
+                            </a>
+                            <button 
+                                type="submit" 
+                                :disabled="loading || config.data_sources.length === 0"
+                                class="btn-primary"
+                                :class="config.data_sources.length === 0 ? 'opacity-50 cursor-not-allowed' : ''"
+                            >
+                                <span x-text="loading ? '保存中...' : '保存'">保存</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 历史记录标签页 -->
+                <div x-show="activeTab === 'history'" x-transition class="bg-white rounded-lg shadow card-shadow p-6">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">历史报告记录</h3>
+                        <p class="text-sm text-gray-500 mt-1">查看该报告配置的历史生成记录</p>
+                    </div>
+
+                    <div x-show="historyRecords.length === 0" class="text-center py-8">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">暂无历史记录</h3>
+                        <p class="mt-1 text-sm text-gray-500">该报告配置还未生成过报告</p>
+                    </div>
+
+                    <div x-show="historyRecords.length > 0" class="space-y-4">
+                        <template x-for="record in historyRecords" :key="record.id">
+                            <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h4 class="text-sm font-medium text-gray-900" x-text="record.title || '未命名报告'"></h4>
+                                    <span class="text-xs text-gray-500" x-text="record.generated_at"></span>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-3" x-text="record.summary || '暂无摘要'"></p>
+                                <div class="flex justify-between items-center">
+                                    <span 
+                                        :class="record.status === 'success' ? 'bg-green-100 text-green-800' : record.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'"
+                                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                        x-text="record.status === 'success' ? '成功' : record.status === 'failed' ? '失败' : '生成中'"
+                                    ></span>
+                                    <button 
+                                        onclick="alert('查看详情功能开发中')"
+                                        class="text-gray-400 text-sm cursor-not-allowed"
+                                        disabled
+                                    >
+                                        查看详情
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 报告内容查看模态框 (暂时禁用) -->
+    <div x-show="false" x-transition class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div class="flex justify-between items-center p-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">报告详情</h3>
+                <button onclick="console.log('关闭模态框')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div class="prose max-w-none">暂无内容</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.reportConfigApp = function reportConfigApp() {
+    return {
+        activeTab: 'config',
+        config: {
+            id: {{ report.id if report else 'null' }},
+            name: '{{ report.name if report else "" }}',
+            data_sources: {{ (report.data_sources.split(',') | map('int') | list) if report and report.data_sources else '[]' }},
+            filter_keywords: '{{ report.filter_keywords if report else "" }}',
+            time_range: '{{ report.time_range if report else "24h" }}',
+            purpose: '{{ report.purpose if report else "" }}',
+            enable_deep_research: {{ 'true' if report and report.enable_deep_research else 'false' }},
+            research_focus: '{{ report.research_focus if report else "" }}',
+            notification_type: '{{ report.notification_type if report else "wechat" }}',
+            webhook_url: '{{ report.webhook_url if report else "" }}'
+        },
+        historyRecords: [],
+        loading: false,
+        testingWebhook: false,
+        showReportModal: false,
+        selectedReport: null,
+        
+        init() {
+            // 如果是编辑模式，加载历史记录
+            if (this.config.id) {
+                this.loadHistoryRecords();
+            }
+        },
+        
+        async loadHistoryRecords() {
+            try {
+                const response = await fetch(`/api/report-config/${this.config.id}/history`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.historyRecords = result.records;
+                }
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+            }
+        },
+        
+        async testWebhook() {
+            if (!this.config.webhook_url) {
+                showToast('请先填写Webhook URL', 'warning');
+                return;
+            }
+            
+            this.testingWebhook = true;
+            
+            try {
+                const response = await fetch('/api/test-webhook', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        notification_type: this.config.notification_type,
+                        webhook_url: this.config.webhook_url
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('测试消息发送成功', 'success');
+                } else {
+                    showToast(result.message || '测试失败', 'error');
+                }
+            } catch (error) {
+                console.error('测试Webhook失败:', error);
+                showToast('测试失败，请检查网络', 'error');
+            } finally {
+                this.testingWebhook = false;
+            }
+        },
+        
+        async saveReport() {
+            if (this.config.data_sources.length === 0) {
+                showToast('请至少选择一个数据源', 'warning');
+                return;
+            }
+            
+            if (this.config.enable_deep_research && !this.config.research_focus.trim()) {
+                showToast('开启深度研究时，请填写报告的侧重点', 'warning');
+                return;
+            }
+            
+            this.loading = true;
+            
+            try {
+                const response = await fetch('/api/report-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(this.config)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('保存成功', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/report-config';
+                    }, 1000);
+                } else {
+                    showToast(result.message || '保存失败', 'error');
+                }
+            } catch (error) {
+                console.error('保存失败:', error);
+                showToast('保存失败，请重试', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        viewReportContent(record) {
+            this.selectedReport = record;
+            this.showReportModal = true;
+        }
+    }
+}
+</script>
+{% endblock %}
