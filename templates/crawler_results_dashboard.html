@@ -1,0 +1,355 @@
+<!-- 爬虫结果页面内容（Dashboard 版本） -->
+<div class="max-w-6xl mx-auto">
+    <!-- 页面标题 -->
+    <div class="mb-6">
+        <div class="flex items-center space-x-2 text-sm text-gray-500 mb-2">
+            <button onclick="window.location.hash = 'crawler-config'" class="hover:text-gray-700">爬虫配置</button>
+            <span>/</span>
+            <span>{{ crawler.name }}</span>
+            <span>/</span>
+            <span>抓取结果</span>
+        </div>
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">{{ crawler.name }} - 抓取结果</h1>
+                <p class="text-gray-600 mt-1">最近50条抓取记录</p>
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="window.location.hash = 'crawler-config-edit-{{ crawler.id }}'" class="btn-secondary">
+                    编辑配置
+                </button>
+                <button onclick="window.location.hash = 'crawler-config'" class="btn-primary">
+                    返回列表
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow card-shadow p-4">
+            <div class="text-sm font-medium text-gray-500">总记录数</div>
+            <div class="text-2xl font-bold text-gray-900">{{ records|length }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow card-shadow p-4">
+            <div class="text-sm font-medium text-gray-500">成功抓取</div>
+            <div class="text-2xl font-bold text-green-600">{{ records|selectattr('status', 'equalto', 'success')|list|length }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow card-shadow p-4">
+            <div class="text-sm font-medium text-gray-500">失败记录</div>
+            <div class="text-2xl font-bold text-red-600">{{ records|selectattr('status', 'equalto', 'failed')|list|length }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow card-shadow p-4">
+            <div class="text-sm font-medium text-gray-500">最后运行</div>
+            <div class="text-sm text-gray-900">
+                {% if crawler.last_run %}
+                    {{ crawler.last_run.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                    从未运行
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 抓取结果列表 -->
+    <div class="bg-white rounded-lg shadow card-shadow">
+        {% if records %}
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">抓取记录</h3>
+        </div>
+        <div class="divide-y divide-gray-200">
+            {% for record in records %}
+            <div class="p-6">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                {% if record.status == 'success' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {% if record.status == 'success' %}成功{% else %}失败{% endif %}
+                            </span>
+                            <span class="text-xs text-gray-500">
+                                {{ record.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </span>
+                        </div>
+                        
+                        {% if record.status == 'success' %}
+                            <h4 class="text-lg font-medium text-gray-900 mb-2">
+                                {{ record.title or '无标题' }}
+                            </h4>
+                            <p class="text-sm text-blue-600 break-all mb-2">
+                                <a href="{{ record.url }}" target="_blank" class="hover:underline">
+                                    {{ record.url }}
+                                </a>
+                            </p>
+                            {% if record.author %}
+                            <p class="text-sm text-gray-600 mb-1">
+                                <span class="font-medium">作者：</span>{{ record.author }}
+                            </p>
+                            {% endif %}
+                            {% if record.publish_date %}
+                            <p class="text-sm text-gray-600 mb-2">
+                                <span class="font-medium">发布时间：</span>{{ record.publish_date.strftime('%Y-%m-%d %H:%M') }}
+                            </p>
+                            {% endif %}
+                            {% if record.content %}
+                            <div class="mt-3 p-3 bg-gray-50 rounded-lg" x-data="{ showFull: false }">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="text-sm font-medium text-gray-700">内容：</div>
+                                    {% if record.content|length > 300 %}
+                                    <div class="flex space-x-2">
+                                        <button 
+                                            @click="showFull = false" 
+                                            :class="!showFull ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'"
+                                            class="px-2 py-1 text-xs rounded transition-colors"
+                                        >
+                                            摘要
+                                        </button>
+                                        <button 
+                                            @click="showFull = true" 
+                                            :class="showFull ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'"
+                                            class="px-2 py-1 text-xs rounded transition-colors"
+                                        >
+                                            全文
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="text-sm text-gray-600">
+                                    {% if record.content|length > 300 %}
+                                    <div x-show="!showFull" class="markdown-content content-container">
+                                        {{ record.content[:300] }}...
+                                    </div>
+                                    <div x-show="showFull" class="markdown-content content-container" x-transition>
+                                        {{ record.content }}
+                                    </div>
+                                    {% else %}
+                                    <div class="markdown-content content-container">
+                                        {{ record.content }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                            <h4 class="text-lg font-medium text-gray-900 mb-2">抓取失败</h4>
+                            <p class="text-sm text-blue-600 break-all mb-2">
+                                {{ record.url }}
+                            </p>
+                            {% if record.error_message %}
+                            <div class="mt-2 p-3 bg-red-50 rounded-lg">
+                                <div class="text-sm font-medium text-red-700 mb-1">错误信息：</div>
+                                <div class="text-sm text-red-600">{{ record.error_message }}</div>
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">暂无抓取记录</h3>
+            <p class="mt-1 text-sm text-gray-500">还没有执行过爬虫任务</p>
+            <div class="mt-6">
+                <button onclick="window.location.hash = 'crawler-config'" class="btn-primary">
+                    返回爬虫列表
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Markdown 渲染库 -->
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+
+<style>
+/* Markdown 内容样式 */
+.markdown-content {
+    line-height: 1.6;
+}
+
+/* 内容容器样式 - 防止溢出 */
+.content-container {
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.markdown-content h1 { font-size: 1.5rem; }
+.markdown-content h2 { font-size: 1.25rem; }
+.markdown-content h3 { font-size: 1.125rem; }
+
+.markdown-content p {
+    margin-bottom: 0.75rem;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin-bottom: 0.75rem;
+    padding-left: 1.5rem;
+}
+
+.markdown-content li {
+    margin-bottom: 0.25rem;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #e5e7eb;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    font-style: italic;
+    color: #6b7280;
+}
+
+.markdown-content code {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+
+.markdown-content pre {
+    background-color: #f3f4f6;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.markdown-content a {
+    color: #3b82f6;
+    text-decoration: underline;
+}
+
+.markdown-content a:hover {
+    color: #1d4ed8;
+}
+
+.markdown-content strong {
+    font-weight: 600;
+}
+
+.markdown-content em {
+    font-style: italic;
+}
+
+.markdown-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.markdown-content th {
+    background-color: #f9fafb;
+    font-weight: 600;
+}
+</style>
+
+<script>
+// 等待页面加载完成后初始化 Markdown 渲染
+setTimeout(function() {
+    // 配置 marked 选项
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            sanitize: false,
+            smartLists: true,
+            smartypants: true
+        });
+        
+        // 渲染所有 markdown 内容
+        function renderMarkdown() {
+            const markdownElements = document.querySelectorAll('.markdown-content');
+            markdownElements.forEach(element => {
+                const originalText = element.textContent || element.innerText;
+                
+                // 检查是否包含 Markdown 语法
+                if (hasMarkdownSyntax(originalText)) {
+                    try {
+                        const htmlContent = marked.parse(originalText);
+                        element.innerHTML = htmlContent;
+                    } catch (error) {
+                        console.error('Markdown 渲染失败:', error);
+                        // 如果渲染失败，保持原始文本
+                    }
+                } else {
+                    // 如果不是 Markdown，保持原始文本但添加段落标签
+                    element.innerHTML = originalText.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+                }
+            });
+        }
+        
+        // 检查文本是否包含 Markdown 语法
+        function hasMarkdownSyntax(text) {
+            const markdownPatterns = [
+                /^#{1,6}\s/m,           // 标题
+                /\*\*.*?\*\*/,          // 粗体
+                /\*.*?\*/,              // 斜体
+                /`.*?`/,                // 行内代码
+                /```[\s\S]*?```/,       // 代码块
+                /^\s*[-*+]\s/m,         // 无序列表
+                /^\s*\d+\.\s/m,         // 有序列表
+                /^\s*>\s/m,             // 引用
+                /\[.*?\]\(.*?\)/,       // 链接
+                /!\[.*?\]\(.*?\)/       // 图片
+            ];
+            
+            return markdownPatterns.some(pattern => pattern.test(text));
+        }
+        
+        // 初始渲染
+        renderMarkdown();
+        
+        // 监听内容变化（当切换摘要/全文时重新渲染）
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    // 延迟渲染，确保 Alpine.js 完成 DOM 更新
+                    setTimeout(renderMarkdown, 100);
+                }
+            });
+        });
+        
+        // 观察当前容器的变化
+        const container = document.getElementById('crawler-results-content');
+        if (container) {
+            observer.observe(container, {
+                childList: true,
+                subtree: true
+            });
+        }
+    }
+}, 500); // 延迟500ms确保 marked 库已加载
+</script>

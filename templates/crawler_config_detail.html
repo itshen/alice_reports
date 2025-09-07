@@ -111,7 +111,7 @@
                                     required
                                     rows="3"
                                     class="form-textarea"
-                                    placeholder='例如：href="([^"]*article[^"]*)"'
+                                    placeholder='例如：([^"]*article[^"]*)'
                                 ></textarea>
                                 <div class="space-y-2">
                                     <input 
@@ -454,7 +454,7 @@ window.crawlerConfigApp = function crawlerConfigApp() {
                 if (result.success) {
                     showToast('保存成功', 'success');
                     setTimeout(() => {
-                        window.location.href = '/crawler-config';
+                        window.location.hash = 'crawler-config';
                     }, 1000);
                 } else {
                     showToast(result.message || '保存失败', 'error');

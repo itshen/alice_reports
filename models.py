@@ -54,6 +54,7 @@ class CrawlRecord(db.Model):
     crawled_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='success')  # success, failed
     error_message = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class ReportConfig(db.Model):
     """报告配置表"""

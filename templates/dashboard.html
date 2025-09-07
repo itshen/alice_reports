@@ -120,6 +120,15 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 爬虫结果页面 -->
+            <div x-show="currentPage.startsWith('crawler-results-')" x-transition>
+                <div id="crawler-results-content">
+                    <div class="flex justify-center items-center h-64">
+                        <div class="text-gray-500">加载中...</div>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 </div>
@@ -167,6 +176,10 @@ function dashboardApp() {
                     const crawlerId = page.replace('crawler-config-edit-', '');
                     apiUrl = `/api/crawler-config/${crawlerId}/edit-form`;
                 }
+            } else if (page.startsWith('crawler-results-')) {
+                contentElement = document.getElementById('crawler-results-content');
+                const crawlerId = page.replace('crawler-results-', '');
+                apiUrl = `/crawler-config/${crawlerId}/results?dashboard=1`;
             } else if (page.startsWith('report-config-')) {
                 contentElement = document.getElementById('report-config-detail-content');
                 if (page === 'report-config-new') {
@@ -308,6 +321,55 @@ window.testConnection = async function testConnection() {
     } finally {
         testBtn.textContent = '测试连接';
         testBtn.disabled = false;
+    }
+}
+
+window.restoreDefaultConfigs = async function restoreDefaultConfigs(configType) {
+    const typeNames = {
+        'crawler': '爬虫配置',
+        'report': '报告配置',
+        'all': '所有配置'
+    };
+    
+    const typeName = typeNames[configType] || '配置';
+    
+    if (!confirm(`确定要恢复默认的${typeName}吗？\n\n此操作将删除现有的${typeName}，且无法撤销。`)) {
+        return;
+    }
+    
+    // 找到对应的按钮
+    const button = event.target;
+    const originalText = button.textContent;
+    
+    button.textContent = '恢复中...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/api/restore-default-configs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ config_type: configType })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(result.message, 'success');
+            // 延迟刷新页面以显示更新后的配置
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            showToast(result.message || '恢复默认配置失败', 'error');
+        }
+    } catch (error) {
+        console.error('恢复默认配置失败:', error);
+        showToast('网络错误，请重试', 'error');
+    } finally {
+        button.textContent = originalText;
+        button.disabled = false;
     }
 }
 
@@ -472,6 +534,12 @@ window.navigateToReportNew = function() {
 window.navigateToReportEdit = function(reportId) {
     // 通过修改hash来触发页面切换
     window.location.hash = `report-config-edit-${reportId}`;
+}
+
+// 查看爬虫结果函数
+window.viewCrawlerResults = function(crawlerId) {
+    // 在 Dashboard 内显示爬虫结果
+    window.location.hash = `crawler-results-${crawlerId}`;
 }
 </script>
 {% endblock %}

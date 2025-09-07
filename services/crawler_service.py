@@ -87,29 +87,29 @@ class CrawlerService:
     async def crawl_article_content(self, url):
         """抓取文章详细内容"""
         try:
-            # 定义文章内容提取策略
+            # 定义更精确的文章内容提取策略
             schema = {
                 "name": "文章内容",
-                "baseSelector": "article, .article, .content, .post, main",
+                "baseSelector": "article, .article, .content, .post, main, .article-content, .news-content, .post-body",
                 "fields": [
                     {
                         "name": "title",
-                        "selector": "h1, h2, .title, .headline, .article-title",
+                        "selector": "h1, h2, .title, .headline, .article-title, .news-title, .post-title",
                         "type": "text"
                     },
                     {
                         "name": "content",
-                        "selector": ".content, .article-body, .post-content, p",
+                        "selector": ".content, .article-body, .post-content, .news-body, .article-text, .main-content, .entry-content",
                         "type": "text"
                     },
                     {
                         "name": "author",
-                        "selector": ".author, .byline, .writer, .article-author",
+                        "selector": ".author, .byline, .writer, .article-author, .news-author",
                         "type": "text"
                     },
                     {
                         "name": "date",
-                        "selector": ".date, .publish-date, .article-date, time",
+                        "selector": ".date, .publish-date, .article-date, time, .news-date, .post-date",
                         "type": "text"
                     }
                 ]
@@ -121,8 +121,13 @@ class CrawlerService:
                 result = await crawler.arun(
                     url=url,
                     extraction_strategy=extraction_strategy,
-                    # 移除不需要的元素
-                    excluded_tags=['nav', 'footer', 'aside', 'script', 'style', 'header'],
+                    # 移除更多不需要的元素
+                    excluded_tags=[
+                        'nav', 'footer', 'aside', 'script', 'style', 'header', 
+                        'menu', 'sidebar', 'advertisement', 'ad', 'banner',
+                        'breadcrumb', 'pagination', 'related', 'comment',
+                        'social', 'share', 'widget', 'toolbar'
+                    ],
                     # 等待页面加载
                     wait_for="body"
                 )
@@ -138,18 +143,22 @@ class CrawlerService:
                         except json.JSONDecodeError:
                             pass
                     
-                    # 如果结构化提取失败，使用markdown内容
-                    if not extracted_data.get('content'):
-                        extracted_data['content'] = result.markdown
+                    # 清理和优化内容
+                    content = extracted_data.get('content', '')
+                    if not content:
+                        # 如果结构化提取失败，尝试从markdown中提取纯文本内容
+                        content = self._extract_clean_content_from_markdown(result.markdown)
+                    else:
+                        # 清理已提取的内容
+                        content = self._clean_article_content(content)
                     
-                    if not extracted_data.get('title'):
-                        extracted_data['title'] = result.metadata.get('title', '')
+                    title = extracted_data.get('title', '') or result.metadata.get('title', '')
                     
                     return {
                         'success': True,
                         'url': url,
-                        'title': extracted_data.get('title', ''),
-                        'content': extracted_data.get('content', ''),
+                        'title': title,
+                        'content': content,
                         'author': extracted_data.get('author', ''),
                         'date': extracted_data.get('date', ''),
                         'markdown': result.markdown
@@ -168,6 +177,137 @@ class CrawlerService:
                 'url': url,
                 'error': str(e)
             }
+    
+    def _clean_article_content(self, content):
+        """清理文章内容，移除不相关信息"""
+        if not content:
+            return ""
+        
+        # 移除常见的导航和无关内容
+        unwanted_patterns = [
+            r'首页.*?网站地图',  # 导航菜单
+            r'网站地图.*?地方频道',  # 网站导航
+            r'地方频道.*?多语种频道',  # 地方频道列表
+            r'多语种频道.*?新华报刊',  # 多语种导航
+            r'新华报刊.*?承建网站',  # 报刊列表
+            r'承建网站.*?客户端',  # 承建网站列表
+            r'手机版.*?站内搜索',  # 移动版导航
+            r'Copyright.*?All Rights Reserved',  # 版权信息
+            r'制作单位：.*?版权所有：.*?',  # 版权信息
+            r'\[.*?\]',  # 方括号内容（通常是链接文本）
+            r'javascript:void\([^)]*\)',  # JavaScript链接
+            r'https?://[^\s]+',  # 清理残留的URL
+            r'_[^_]*_',  # 下划线包围的内容
+            r'![^!]*!',  # 感叹号包围的内容
+            r'网站无障碍',  # 无障碍链接
+            r'PC版本',  # 版本切换
+            r'客户端',  # 客户端下载
+            r'字体：\s*小\s*中\s*大',  # 字体大小选择
+            r'分享到：.*?\)',  # 分享按钮
+            r'\([^)]*javascript[^)]*\)',  # 包含javascript的括号内容
+            r'来源：[^\n]*\n',  # 来源信息（保留但不重复）
+            r'^\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}',  # 时间戳
+        ]
+        
+        cleaned_content = content
+        for pattern in unwanted_patterns:
+            cleaned_content = re.sub(pattern, '', cleaned_content, flags=re.IGNORECASE | re.DOTALL)
+        
+        # 清理多余的空白字符
+        cleaned_content = re.sub(r'\n\s*\n', '\n\n', cleaned_content)  # 合并多个空行
+        cleaned_content = re.sub(r'[ \t]+', ' ', cleaned_content)  # 合并多个空格
+        cleaned_content = cleaned_content.strip()
+        
+        return cleaned_content
+    
+    def _extract_clean_content_from_markdown(self, markdown):
+        """从markdown中提取干净的文章内容"""
+        if not markdown:
+            return ""
+        
+        # 分步骤清理内容
+        content = markdown
+        
+        # 1. 移除大块的导航区域（使用更精确的模式）
+        navigation_patterns = [
+            r'!\[.*?\]\([^)]*\).*?手机版.*?网站地图.*?地方频道.*?多语种频道.*?新华报刊.*?承建网站.*?客户端',  # 完整导航块（包含图片）
+            r'手机版.*?站内搜索.*?新华通讯社主办',  # 移动版导航到主办方
+            r'Copyright.*?All Rights Reserved.*?制作单位：.*?版权所有：[^\n]*',  # 版权信息块
+            r'\[.*?\]\([^)]*\)\s*\*\s*\[.*?\]\([^)]*\)\s*\*.*?地方频道',  # 链接列表模式
+            r'地方频道\s*\*.*?多语种频道',  # 地方频道列表
+            r'多语种频道\s*\*.*?新华报刊',  # 多语种频道列表
+            r'新华报刊\s*\[.*?\].*?承建网站',  # 报刊列表
+            r'承建网站\s*\[.*?\].*?客户端',  # 承建网站列表
+        ]
+        
+        for pattern in navigation_patterns:
+            content = re.sub(pattern, '', content, flags=re.IGNORECASE | re.DOTALL)
+        
+        # 2. 移除小的无关元素
+        small_unwanted_patterns = [
+            r'javascript:void\([^)]*\)',  # JavaScript链接
+            r'字体：\s*小\s*中\s*大',  # 字体大小选择
+            r'分享到：[^#\n]*',  # 分享按钮（但保留#标题）
+            r'\([^)]*javascript[^)]*\)',  # 包含javascript的括号内容
+            r'网站无障碍',  # 无障碍链接
+            r'PC版本',  # 版本切换
+            r'!\[.*?\]\([^)]*\)',  # Markdown图片链接
+            r'https?://[^\s\)]+',  # 清理残留的URL（但不在括号内的）
+            r'\[.*?\]\([^)]*\)\s*\*\s*',  # 链接后的星号
+            r'\*\s*\[.*?\]\([^)]*\)',  # 星号开头的链接
+            r'^\s*\*\s*.*?$',  # 以星号开头的行（通常是导航项）
+            r'^\s*\[.*?\]\([^)]*\)\s*$',  # 单独的链接行
+        ]
+        
+        for pattern in small_unwanted_patterns:
+            content = re.sub(pattern, '', content, flags=re.IGNORECASE)
+        
+        # 3. 智能提取文章主体
+        lines = content.split('\n')
+        
+        # 找到文章标题（通常是#开头或包含关键词）
+        title_idx = -1
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if line.startswith('#') and ('新华网' in line or '评' in line or len(line) > 15):
+                title_idx = i
+                break
+        
+        # 如果找到标题，从标题开始提取
+        if title_idx >= 0:
+            start_idx = title_idx
+        else:
+            # 否则找到第一个看起来像正文的行
+            start_idx = 0
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if (line and len(line) > 20 and 
+                    not any(keyword in line.lower() for keyword in [
+                        '首页', '导航', '菜单', '登录', '注册', '搜索', '网站地图'
+                    ]) and
+                    ('新华网' in line or '记者' in line or line.endswith('电') or '日' in line)):
+                    start_idx = i
+                    break
+        
+        # 找到文章结束位置
+        end_idx = len(lines)
+        for i in range(start_idx + 1, len(lines)):
+            line = lines[i].strip()
+            if any(keyword in line.lower() for keyword in [
+                'copyright', '版权所有', '制作单位', '责任编辑', '纠错'
+            ]):
+                end_idx = i
+                break
+        
+        # 提取文章主体
+        article_lines = lines[start_idx:end_idx]
+        article_content = '\n'.join(article_lines).strip()
+        
+        # 4. 最后清理
+        article_content = re.sub(r'\n{3,}', '\n\n', article_content)  # 限制连续空行
+        article_content = re.sub(r'[ \t]+', ' ', article_content)  # 合并多个空格
+        
+        return article_content
     
     async def run_crawler_task(self, crawler_config):
         """执行爬虫任务"""
@@ -210,18 +350,18 @@ class CrawlerService:
         
         # 基于样本标题生成简单的正则表达式
         if not sample_titles:
-            return r'href="([^"]*\.html?[^"]*)"'
+            return r'([^"]*\.html?[^"]*)"'
         
         # 分析样本标题，尝试找到共同模式
         # 这是一个简化的实现，实际可以使用LLM来生成更智能的正则
         
         # 常见的文章链接模式
         patterns = [
-            r'href="([^"]*article[^"]*)"',
-            r'href="([^"]*news[^"]*)"',
-            r'href="([^"]*post[^"]*)"',
-            r'href="([^"]*\.html[^"]*)"',
-            r'href="(/[^"]*\d{4}[^"]*)"'  # 包含年份的链接
+            r'([^"]*article[^"]*)"',
+            r'([^"]*news[^"]*)"',
+            r'([^"]*post[^"]*)"',
+            r'([^"]*\.html[^"]*)"',
+            r'"(/[^"]*\d{4}[^"]*)"'  # 包含年份的链接
         ]
         
         # 返回第一个模式作为默认

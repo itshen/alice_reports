@@ -135,7 +135,7 @@
             <p class="mt-1 text-sm text-gray-500">开始创建您的第一个智能分析报告</p>
             <div class="mt-6">
                 <button 
-                    onclick="window.location.href='/report-config/new'"
+                    onclick="window.location.hash='report-config-new'"
                     class="btn-primary"
                 >
                     新建报告
@@ -147,6 +147,15 @@
 </div>
 
 <script>
+// 导航函数
+window.navigateToReportNew = function() {
+    window.location.hash = 'report-config-new';
+}
+
+window.navigateToReportEdit = function(reportId) {
+    window.location.hash = `report-config-edit-${reportId}`;
+}
+
 // 全局函数定义
 window.generateReportOnce = async function generateReportOnce(reportId) {
     try {

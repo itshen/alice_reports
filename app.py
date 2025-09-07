@@ -48,6 +48,7 @@ from models import GlobalSettings, CrawlerConfig, CrawlRecord, ReportConfig, Rep
 from services.crawler_service import CrawlerService
 from services.llm_service import LLMService
 from services.notification_service import NotificationService
+from services.default_config_service import DefaultConfigService
 
 crawler_service = CrawlerService()
 llm_service = LLMService()
@@ -57,17 +58,10 @@ def create_tables():
     """创建数据库表"""
     db.create_all()
     
-    # 创建默认的全局设置
-    if not GlobalSettings.query.first():
-        default_settings = GlobalSettings(
-            serp_api_key='',
-            llm_provider='qwen',
-            llm_base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
-            llm_api_key='',
-            llm_model_name='qwen-plus'
-        )
-        db.session.add(default_settings)
-        db.session.commit()
+    # 初始化默认配置
+    logger.info("正在初始化默认配置...")
+    DefaultConfigService.init_default_configs()
+    logger.info("默认配置初始化完成")
 
 # 认证装饰器
 def login_required(f):
@@ -183,8 +177,8 @@ def test_llm_connection():
 @login_required
 def crawler_config_list():
     """爬虫配置列表页"""
-    crawlers = CrawlerConfig.query.all()
-    return render_template('crawler_config_list.html', crawlers=crawlers)
+    # 重定向到 Dashboard
+    return redirect('/dashboard#crawler-config')
 
 @app.route('/crawler-config/new')
 @login_required
@@ -201,9 +195,8 @@ def crawler_config_detail(crawler_id):
 @app.route('/crawler-config/<int:crawler_id>/edit')
 @login_required
 def crawler_config_edit(crawler_id):
-    """编辑爬虫配置页"""
-    crawler = CrawlerConfig.query.get_or_404(crawler_id)
-    return render_template('crawler_config_detail.html', crawler=crawler)
+    """编辑爬虫配置页 - 重定向到Dashboard"""
+    return redirect(f'/dashboard#crawler-config-edit-{crawler_id}')
 
 @app.route('/crawler-config/<int:crawler_id>/results')
 @login_required
@@ -214,7 +207,14 @@ def crawler_results(crawler_id):
     records = CrawlRecord.query.filter_by(crawler_config_id=crawler_id)\
                               .order_by(CrawlRecord.created_at.desc())\
                               .limit(50).all()
-    return render_template('crawler_results.html', crawler=crawler, records=records)
+    
+    # 检查是否是 Dashboard 内的 AJAX 请求
+    if request.args.get('dashboard') == '1':
+        # 返回 Dashboard 内嵌版本（只有内容部分）
+        return render_template('crawler_results_dashboard.html', crawler=crawler, records=records)
+    else:
+        # 直接访问时，重定向到 Dashboard 并设置正确的 hash
+        return redirect(f'/dashboard#crawler-results-{crawler_id}')
 
 @app.route('/api/crawler-config/new-form')
 @login_required
@@ -425,8 +425,8 @@ def test_crawling():
 @login_required
 def report_config_list():
     """报告配置列表页"""
-    reports = ReportConfig.query.all()
-    return render_template('report_config_list.html', reports=reports)
+    # 重定向到 Dashboard
+    return redirect('/dashboard#report-config')
 
 @app.route('/report-config/new')
 @login_required
@@ -743,6 +743,35 @@ def test_webhook():
     
     except Exception as e:
         logger.error(f"测试Webhook失败: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/restore-default-configs', methods=['POST'])
+@login_required
+def restore_default_configs():
+    """恢复默认配置"""
+    try:
+        config_type = request.json.get('config_type', 'all')
+        
+        logger.info(f"开始恢复默认配置: {config_type}")
+        
+        success = DefaultConfigService.restore_default_configs(config_type)
+        
+        if success:
+            message = f"成功恢复{config_type}默认配置"
+            if config_type == 'all':
+                message = "成功恢复所有默认配置"
+            elif config_type == 'crawler':
+                message = "成功恢复爬虫默认配置"
+            elif config_type == 'report':
+                message = "成功恢复报告默认配置"
+            
+            logger.info(message)
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': '恢复默认配置失败，请查看日志'}), 500
+            
+    except Exception as e:
+        logger.error(f"恢复默认配置失败: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':

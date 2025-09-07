@@ -418,7 +418,7 @@ window.reportConfigApp = function reportConfigApp() {
                 if (result.success) {
                     showToast('保存成功', 'success');
                     setTimeout(() => {
-                        window.location.href = '/report-config';
+                        window.location.hash = 'report-config';
                     }, 1000);
                 } else {
                     showToast(result.message || '保存失败', 'error');

@@ -130,7 +130,7 @@
             <p class="mt-1 text-sm text-gray-500">开始创建您的第一个爬虫任务</p>
             <div class="mt-6">
                 <button 
-                    onclick="window.location.href='/crawler-config/new'"
+                    onclick="window.location.hash='crawler-config-new'"
                     class="btn-primary"
                 >
                     新建爬虫
@@ -145,11 +145,11 @@
 // 爬虫配置页面的JavaScript函数
 
 window.navigateToCrawlerNew = function() {
-    window.location.href = '/crawler-config/new';
+    window.location.hash = 'crawler-config-new';
 }
 
 window.navigateToCrawlerEdit = function(crawlerId) {
-    window.location.href = `/crawler-config/${crawlerId}/edit`;
+    window.location.hash = `crawler-config-edit-${crawlerId}`;
 }
 
 window.runCrawlerOnce = async function(crawlerId) {
@@ -175,7 +175,7 @@ window.runCrawlerOnce = async function(crawlerId) {
 }
 
 window.viewCrawlerResults = function(crawlerId) {
-    window.location.href = `/crawler-config/${crawlerId}/results`;
+    window.location.href = `/dashboard#crawler-results-${crawlerId}`;
 }
 
 window.deleteCrawler = async function(crawlerId) {
