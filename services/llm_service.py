@@ -105,7 +105,7 @@ class LLMService:
                 'message': f'连接测试失败: {str(e)}'
             }
     
-    def _make_request(self, messages: List[Dict], temperature: float = 0.7) -> str:
+    def _make_request(self, messages: List[Dict], temperature: float = 0.7, stream: bool = False) -> str:
         """发送请求到LLM服务"""
         if not self.settings or not self.settings.llm_api_key:
             raise Exception("LLM设置未配置")
@@ -119,27 +119,77 @@ class LLMService:
             'model': self.settings.llm_model_name,
             'messages': messages,
             'temperature': temperature,
-            'max_tokens': 4000
+            'max_tokens': 4000,
+            'stream': stream
         }
+        
+        try:
+            if stream:
+                return self._handle_stream_request(headers, data)
+            else:
+                response = requests.post(
+                    f"{self.settings.llm_base_url}/chat/completions",
+                    headers=headers,
+                    json=data,
+                    timeout=120  # 增加超时时间
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result['choices'][0]['message']['content']
+                else:
+                    logger.error(f"LLM请求失败: {response.status_code} - {response.text}")
+                    raise Exception(f"LLM请求失败: {response.status_code}")
+        
+        except requests.exceptions.RequestException as e:
+            logger.error(f"LLM请求异常: {e}")
+            raise Exception(f"LLM请求异常: {e}")
+    
+    def _handle_stream_request(self, headers: Dict, data: Dict) -> str:
+        """处理流式请求"""
+        import json
         
         try:
             response = requests.post(
                 f"{self.settings.llm_base_url}/chat/completions",
                 headers=headers,
                 json=data,
-                timeout=60
+                stream=True,
+                timeout=300  # 流式请求更长的超时时间
             )
             
-            if response.status_code == 200:
-                result = response.json()
-                return result['choices'][0]['message']['content']
-            else:
-                logger.error(f"LLM请求失败: {response.status_code} - {response.text}")
-                raise Exception(f"LLM请求失败: {response.status_code}")
-        
+            if response.status_code != 200:
+                logger.error(f"流式LLM请求失败: {response.status_code} - {response.text}")
+                raise Exception(f"流式LLM请求失败: {response.status_code}")
+            
+            content = ""
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8')
+                    if line_str.startswith('data: '):
+                        line_str = line_str[6:]  # 移除 'data: ' 前缀
+                        
+                        if line_str.strip() == '[DONE]':
+                            break
+                            
+                        try:
+                            chunk_data = json.loads(line_str)
+                            if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                delta = chunk_data['choices'][0].get('delta', {})
+                                if 'content' in delta:
+                                    content += delta['content']
+                                    # 实时显示进度（可选）
+                                    print(delta['content'], end='', flush=True)
+                        except json.JSONDecodeError:
+                            # 忽略无法解析的行
+                            continue
+            
+            logger.info(f"流式请求完成，生成内容长度: {len(content)}")
+            return content
+            
         except requests.exceptions.RequestException as e:
-            logger.error(f"LLM请求异常: {e}")
-            raise Exception(f"LLM请求异常: {e}")
+            logger.error(f"流式LLM请求异常: {e}")
+            raise Exception(f"流式LLM请求异常: {e}")
     
     def generate_url_regex(self, settings, page_content: str, url: str, requirement: str = '匹配文章详情页链接') -> Dict[str, Any]:
         """使用AI生成URL正则表达式"""
@@ -296,12 +346,18 @@ class LLMService:
         
         filtered_articles = []
         for article in articles:
-            title = article.get('title', '').lower()
-            content = article.get('content', '').lower()
+            # 安全地获取标题和内容，确保不是None
+            title = article.get('title') or ''
+            content = article.get('content') or ''
+            
+            # 转换为小写进行匹配
+            title_lower = title.lower() if title else ''
+            content_lower = content.lower() if content else ''
             
             # 检查是否包含任一关键词
             for keyword in keyword_list:
-                if keyword.lower() in title or keyword.lower() in content:
+                keyword_lower = keyword.lower()
+                if keyword_lower in title_lower or keyword_lower in content_lower:
                     filtered_articles.append(article)
                     break
         
@@ -442,13 +498,156 @@ class LLMService:
             return []
         
         try:
-            # 这里可以集成SerpAPI或其他搜索服务
-            # 目前返回空列表作为占位符
-            logger.info(f"搜索主题: {topic}")
-            return []
+            import requests
+            
+            logger.info(f"开始搜索主题: {topic}")
+            
+            # 使用SerpAPI进行搜索，匹配实际API格式
+            search_url = "https://serpapi.com/search"
+            params = {
+                'engine': 'google',
+                'q': topic,
+                'api_key': serp_api_key,
+                'num': 10,  # 获取前10个结果
+                'hl': 'zh-cn',  # 中文搜索
+                'gl': 'cn',  # 中国地区
+                'json_restrictor': 'organic_results[].{position,title,snippet,redirect_link,date}'
+            }
+            
+            response = requests.get(search_url, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                search_results = []
+                organic_results = data.get('organic_results', [])
+                
+                for result in organic_results:
+                    # 处理redirect_link，提取真实URL
+                    url = result.get('redirect_link', '')
+                    if url and 'url=' in url:
+                        # 从Google重定向链接中提取真实URL
+                        import urllib.parse
+                        try:
+                            parsed = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                            if 'url' in parsed:
+                                url = parsed['url'][0]
+                        except:
+                            pass  # 如果解析失败，保持原URL
+                    
+                    # 从URL推断来源域名
+                    source = ''
+                    if url:
+                        try:
+                            from urllib.parse import urlparse
+                            parsed_url = urlparse(url)
+                            source = parsed_url.netloc
+                        except:
+                            source = url[:50] + '...' if len(url) > 50 else url
+                    
+                    search_results.append({
+                        'title': result.get('title', ''),
+                        'url': url,
+                        'snippet': result.get('snippet', ''),
+                        'source': source,
+                        'date': result.get('date', ''),
+                        'position': result.get('position', 0)
+                    })
+                
+                logger.info(f"搜索完成，获得 {len(search_results)} 个结果")
+                return search_results
+            else:
+                logger.error(f"搜索API请求失败: {response.status_code}")
+                return []
         
         except Exception as e:
             logger.error(f"网络搜索失败: {e}")
             return []
+    
+    def generate_search_based_report(self, search_results: List[Dict], research_topic: str, research_focus: str) -> str:
+        """基于搜索结果生成深度研究报告"""
+        if not search_results:
+            return "未找到相关搜索结果，无法生成研究报告。"
+        
+        try:
+            # 准备搜索结果内容
+            search_content = []
+            for i, result in enumerate(search_results[:10], 1):
+                content = f"搜索结果 {i}:\n"
+                content += f"标题：{result.get('title', '')}\n"
+                content += f"来源：{result.get('source', '')}\n"
+                content += f"摘要：{result.get('snippet', '')}\n"
+                content += f"链接：{result.get('url', '')}\n"
+                if result.get('date'):
+                    content += f"日期：{result['date']}\n"
+                search_content.append(content)
+            
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"""你是一位专业的研究分析师。请基于提供的搜索结果，围绕研究主题进行深入分析。
+
+研究主题：{research_topic}
+研究重点：{research_focus}
+
+请生成一份结构化的深度研究报告，包含以下部分：
+1. 执行摘要
+2. 关键发现
+3. 深度分析
+4. 趋势洞察
+5. 结论与建议
+
+报告应该专业、客观、有深度，并基于搜索结果提供有价值的洞察。"""
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+研究主题：{research_topic}
+研究重点：{research_focus}
+
+基于以下搜索结果进行深度分析：
+
+{chr(10).join(search_content)}
+
+请基于以上搜索结果生成深度研究报告。
+"""
+                }
+            ]
+            
+            result = self._make_request(messages, temperature=0.7)
+            
+            # 添加报告头部信息
+            header = f"""# {research_topic} - 深度研究报告
+
+**生成时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+**研究主题：** {research_topic}
+**研究重点：** {research_focus}
+**搜索结果数：** {len(search_results)}
+
+---
+
+"""
+            
+            footer = f"""
+
+---
+
+## 📊 数据来源
+
+本报告基于以下 {len(search_results)} 个搜索结果进行分析：
+
+"""
+            
+            # 添加搜索结果来源列表
+            for i, result in enumerate(search_results[:10], 1):
+                footer += f"{i}. [{result.get('title', '无标题')}]({result.get('url', '#')}) - {result.get('source', '未知来源')}\n"
+            
+            footer += "\n*本报告基于网络搜索结果由智能信息分析平台自动生成*"
+            
+            return header + result + footer
+        
+        except Exception as e:
+            logger.error(f"生成基于搜索的深度研究报告失败: {e}")
+            return f"深度研究报告生成失败：{e}"
 
 # datetime已在上面导入

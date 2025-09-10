@@ -147,9 +147,12 @@
                             </div>
                         </div>
 
-                        <!-- 深度研究配置 -->
+                        <!-- 通用深度研究配置 -->
                         <div class="border-t border-gray-200 pt-6">
-                            <h3 class="text-lg font-medium text-gray-900 mb-4">智能分析配置</h3>
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">
+                                🎯 智能深度研究配置
+                                <span class="text-sm font-normal text-blue-600">(适配任何研究领域)</span>
+                            </h3>
                             
                             <div class="space-y-4">
                                 <div>
@@ -159,27 +162,56 @@
                                             x-model="config.enable_deep_research"
                                             class="form-checkbox h-4 w-4 text-blue-600"
                                         >
-                                        <span class="ml-2 text-sm font-medium text-gray-700">开启自动化深度研究</span>
+                                        <span class="ml-2 text-sm font-medium text-gray-700">开启AI深度研究</span>
+                                        <span class="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">通用框架</span>
                                     </label>
-                                    <p class="text-xs text-gray-500 mt-1 ml-6">
-                                        启用后，系统将使用AI进行深度分析和研究，生成更详细的报告
-                                    </p>
+                                    <div class="text-xs text-gray-500 mt-2 ml-6 space-y-1">
+                                        <p>🔬 <strong>智能分析</strong>：AI自动识别研究领域，应用对应分析框架</p>
+                                        <p>🏷️ <strong>自动标注</strong>：为所有内容添加来源、类型、可信度标注</p>
+                                        <p>📊 <strong>质量保证</strong>：多源验证、时效控制、权威优先</p>
+                                    </div>
                                 </div>
 
-                                <div x-show="config.enable_deep_research" x-transition>
-                                    <label for="research_focus" class="block text-sm font-medium text-gray-700 mb-2">
-                                        报告的侧重点 <span class="text-red-500">*</span>
-                                    </label>
-                                    <textarea 
-                                        id="research_focus" 
-                                        name="research_focus" 
-                                        x-model="config.research_focus"
-                                        :required="config.enable_deep_research"
-                                        rows="4"
-                                        class="form-textarea"
-                                        :class="config.enable_deep_research ? 'ring-2 ring-blue-500 border-blue-500' : ''"
-                                        placeholder="请详细描述AI应该如何分析和研究这些信息，例如：&#10;&#10;请深入研究Nano Banana的技术特点、与主流模型（如Midjourney, DALL-E 3）的优劣势对比、定价策略、开发者社区反馈以及潜在的应用场景。最终形成一份综合评估报告。"
-                                    ></textarea>
+                                <div x-show="config.enable_deep_research" x-transition class="space-y-4">
+                                    <div>
+                                        <label for="research_focus" class="block text-sm font-medium text-gray-700 mb-2">
+                                            研究重点和分析方向 <span class="text-red-500">*</span>
+                                        </label>
+                                        <textarea 
+                                            id="research_focus" 
+                                            name="research_focus" 
+                                            x-model="config.research_focus"
+                                            :required="config.enable_deep_research"
+                                            rows="4"
+                                            class="form-textarea"
+                                            :class="config.enable_deep_research ? 'ring-2 ring-blue-500 border-blue-500' : ''"
+                                            placeholder="请描述您希望AI重点关注的分析维度，系统将自动应用通用分析框架：&#10;&#10;📋 通用分析框架：&#10;• 现状分析 - 领域概况、主要参与者、核心要素&#10;• 深度解析 - 技术/方法细节、关键指标、对比分析&#10;• 趋势洞察 - 发展方向、机会挑战、影响因素&#10;• 价值评估 - 实际应用、商业价值、社会意义&#10;• 策略建议 - 可执行建议、风险提示、发展建议&#10;&#10;💡 示例：重点关注技术创新突破点、市场竞争格局变化、用户接受度反馈、商业化应用前景..."
+                                        ></textarea>
+                                    </div>
+                                    
+                                    <div class="bg-blue-50 p-4 rounded-lg">
+                                        <h4 class="text-sm font-medium text-blue-900 mb-2">🎯 系统将自动提供：</h4>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-blue-800">
+                                            <div>
+                                                <p><strong>智能标注</strong></p>
+                                                <ul class="list-disc list-inside space-y-1 ml-2">
+                                                    <li>[时间节点] - 自动识别时间数据</li>
+                                                    <li>[量化指标] - 识别统计和性能数据</li>
+                                                    <li>[权威资料] - 标注官方和专业信息</li>
+                                                    <li>[专家观点] - 识别专业人士意见</li>
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <p><strong>质量保证</strong></p>
+                                                <ul class="list-disc list-inside space-y-1 ml-2">
+                                                    <li>多源数据验证</li>
+                                                    <li>AI智能筛选过滤</li>
+                                                    <li>时效性控制</li>
+                                                    <li>信息来源追溯</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

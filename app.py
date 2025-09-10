@@ -639,7 +639,23 @@ def generate_report_once(report_id):
                 
                 # 生成报告
                 if report.enable_deep_research:
-                    content = llm_service.generate_deep_research_report(articles, report)
+                    # 使用通用深度研究服务
+                    with app.app_context():
+                        from services.deep_research_service import DeepResearchService
+                        deep_research_service = DeepResearchService(crawler_service, llm_service)
+                        
+                        # 获取全局设置
+                        settings = GlobalSettings.query.first()
+                        if not settings:
+                            raise Exception("未找到全局设置")
+                        
+                        # 执行深度研究
+                        result = asyncio.run(deep_research_service.conduct_deep_research(report, settings))
+                        
+                        if result['success']:
+                            content = result['report']
+                        else:
+                            raise Exception(f"深度研究失败: {result['message']}")
                 else:
                     content = llm_service.generate_simple_report(articles, report)
                 

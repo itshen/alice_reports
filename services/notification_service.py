@@ -178,6 +178,64 @@ class NotificationService:
         
         return result
     
+    def _add_universal_annotations(self, line: str) -> str:
+        """通用智能标注系统 - 自适应任何研究领域"""
+        if not line.strip():
+            return line
+        
+        import re
+        
+        # 1. 数据类型标注 - 适用于任何定量研究
+        if re.search(r'\d+[年月日]|\d{4}年|\d+月|\d+日|\d{4}-\d{2}-\d{2}', line):
+            return f"{line} **[时间节点]**"
+        elif re.search(r'\d+%|\d+倍|\d+\.\d+%|\d+比\d+|增长\d+|下降\d+', line):
+            return f"{line} **[量化指标]**"
+        elif re.search(r'\d+万|\d+亿|\d+千万|\$\d+|€\d+|￥\d+', line):
+            return f"{line} **[规模数据]**"
+        elif re.search(r'\d+篇|\d+个|\d+项|\d+轮|\d+次|\d+人|\d+家', line):
+            return f"{line} **[统计计数]**"
+        
+        # 2. 信息性质标注 - 适用于任何信息类型
+        elif any(keyword in line for keyword in ['发布', '推出', '上线', '发表', '宣布', '启动', '开始']):
+            return f"{line} **[发布动态]**"
+        elif any(keyword in line for keyword in ['突破', '创新', '首次', '新增', '升级', '改进', '优化']):
+            return f"{line} **[创新进展]**"
+        elif any(keyword in line for keyword in ['预测', '预计', '将会', '未来', '趋势', '展望', '可能']):
+            return f"{line} **[前瞻分析]**"
+        elif any(keyword in line for keyword in ['显示', '表明', '证明', '研究发现', '数据表明', '结果显示']):
+            return f"{line} **[研究发现]**"
+        elif any(keyword in line for keyword in ['优势', '特点', '特征', '功能', '性能', '能力', '特色']):
+            return f"{line} **[特征描述]**"
+        elif any(keyword in line for keyword in ['影响', '作用', '效果', '结果', '后果', '意义']):
+            return f"{line} **[影响评估]**"
+        elif any(keyword in line for keyword in ['问题', '挑战', '困难', '风险', '限制', '缺陷']):
+            return f"{line} **[问题识别]**"
+        elif any(keyword in line for keyword in ['建议', '推荐', '应该', '需要', '建议', '方案']):
+            return f"{line} **[策略建议]**"
+        
+        # 3. 来源可信度标注 - 适用于任何信息来源
+        elif any(keyword in line for keyword in ['根据', '据', '引用', '来源于', '参考']):
+            return f"{line} **[引用来源]**"
+        elif any(keyword in line for keyword in ['官方', '权威', '专业', '学术', '科学']):
+            return f"{line} **[权威资料]**"
+        elif any(keyword in line for keyword in ['用户', '客户', '消费者', '受访者', '调研对象']):
+            return f"{line} **[用户观点]**"
+        elif any(keyword in line for keyword in ['专家', '学者', '研究员', '分析师', '权威人士']):
+            return f"{line} **[专家观点]**"
+        
+        # 4. 行业领域标注 - 自动识别研究领域
+        elif any(keyword in line for keyword in ['技术', '科技', '算法', '系统', '平台', '工具']):
+            return f"{line} **[技术领域]**"
+        elif any(keyword in line for keyword in ['市场', '商业', '经济', '商务', '贸易', '销售']):
+            return f"{line} **[商业领域]**"
+        elif any(keyword in line for keyword in ['政策', '法规', '制度', '规定', '标准', '法律']):
+            return f"{line} **[政策法规]**"
+        elif any(keyword in line for keyword in ['社会', '文化', '教育', '健康', '环境', '生活']):
+            return f"{line} **[社会领域]**"
+        
+        # 默认返回原始行
+        return line
+    
     def test_webhook(self, notification_type: str, webhook_url: str) -> Dict:
         """测试Webhook连接"""
         try:

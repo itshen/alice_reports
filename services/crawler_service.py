@@ -24,8 +24,12 @@ class CrawlerService:
     async def test_connection(self, url):
         """测试连接并返回页面内容"""
         try:
+            # 设置5秒超时
             async with AsyncWebCrawler(verbose=False) as crawler:
-                result = await crawler.arun(url=url)
+                result = await asyncio.wait_for(
+                    crawler.arun(url=url), 
+                    timeout=5.0
+                )
                 
                 if result.success:
                     # 提取页面中的所有链接
@@ -48,6 +52,12 @@ class CrawlerService:
                         'error': result.error_message or '连接失败'
                     }
         
+        except asyncio.TimeoutError:
+            logger.error(f"连接超时: {url}")
+            return {
+                'success': False,
+                'error': f'连接超时（5秒）: {url}'
+            }
         except Exception as e:
             logger.error(f"测试连接失败: {e}")
             return {
@@ -58,8 +68,12 @@ class CrawlerService:
     async def extract_urls_from_page(self, url, regex_pattern):
         """从页面提取URL列表"""
         try:
+            logger.info(f"开始提取URL from: {url}")
             async with AsyncWebCrawler(verbose=False) as crawler:
-                result = await crawler.arun(url=url)
+                result = await asyncio.wait_for(
+                    crawler.arun(url=url), 
+                    timeout=5.0
+                )
                 
                 if not result.success:
                     return []
@@ -80,6 +94,9 @@ class CrawlerService:
                 logger.info(f"去重后URL数量: {len(unique_matches)}")
                 return unique_matches
         
+        except asyncio.TimeoutError:
+            logger.error(f"提取URL超时: {url}")
+            return []
         except Exception as e:
             logger.error(f"提取URL失败: {e}")
             return []
@@ -87,6 +104,12 @@ class CrawlerService:
     async def crawl_article_content(self, url):
         """抓取文章详细内容"""
         try:
+            logger.info(f"开始爬取文章内容: {url}")
+            
+            # 统一设置5秒超时
+            timeout = 5.0
+            logger.info(f"设置超时时间: {timeout}秒")
+            
             # 定义更精确的文章内容提取策略
             schema = {
                 "name": "文章内容",
@@ -118,18 +141,21 @@ class CrawlerService:
             extraction_strategy = JsonCssExtractionStrategy(schema, verbose=False)
             
             async with AsyncWebCrawler(verbose=False) as crawler:
-                result = await crawler.arun(
-                    url=url,
-                    extraction_strategy=extraction_strategy,
-                    # 移除更多不需要的元素
-                    excluded_tags=[
-                        'nav', 'footer', 'aside', 'script', 'style', 'header', 
-                        'menu', 'sidebar', 'advertisement', 'ad', 'banner',
-                        'breadcrumb', 'pagination', 'related', 'comment',
-                        'social', 'share', 'widget', 'toolbar'
-                    ],
-                    # 等待页面加载
-                    wait_for="body"
+                result = await asyncio.wait_for(
+                    crawler.arun(
+                        url=url,
+                        extraction_strategy=extraction_strategy,
+                        # 移除更多不需要的元素
+                        excluded_tags=[
+                            'nav', 'footer', 'aside', 'script', 'style', 'header', 
+                            'menu', 'sidebar', 'advertisement', 'ad', 'banner',
+                            'breadcrumb', 'pagination', 'related', 'comment',
+                            'social', 'share', 'widget', 'toolbar'
+                        ],
+                        # 等待页面加载
+                        wait_for="body"
+                    ),
+                    timeout=timeout  # 根据域名动态设置超时时间
                 )
                 
                 if result.success:
@@ -154,6 +180,7 @@ class CrawlerService:
                     
                     title = extracted_data.get('title', '') or result.metadata.get('title', '')
                     
+                    logger.info(f"成功爬取文章: {title[:50]}...")
                     return {
                         'success': True,
                         'url': url,
@@ -170,6 +197,13 @@ class CrawlerService:
                         'error': result.error_message or '抓取失败'
                     }
         
+        except asyncio.TimeoutError:
+            logger.error(f"抓取文章内容超时 {url}")
+            return {
+                'success': False,
+                'url': url,
+                'error': f'抓取超时（5秒）: {url}'
+            }
         except Exception as e:
             logger.error(f"抓取文章内容失败 {url}: {e}")
             return {
@@ -328,7 +362,8 @@ class CrawlerService:
             
             # 2. 批量抓取文章内容
             results = []
-            for url in urls[:20]:  # 限制每次最多抓取20篇文章
+            for i, url in enumerate(urls[:20]):  # 限制每次最多抓取20篇文章
+                logger.info(f"正在爬取第 {i+1}/{min(len(urls), 20)} 篇文章")
                 result = await self.crawl_article_content(url)
                 results.append(result)
                 
