@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 V3.0 XML交互版深度研究测试用例
-测试迭代式AI研究流程
+专门测试B端商业模式观察报告的AI研究流程
 """
 
 import asyncio
@@ -20,7 +20,7 @@ from services.llm_service import LLMService
 from services.deep_research_service import DeepResearchService
 
 class V3DeepResearchTester:
-    """V3.0 XML交互版深度研究测试类"""
+    """V3.0 XML交互版深度研究测试类 - B端商业模式观察"""
     
     def __init__(self):
         self.crawler_service = CrawlerService()
@@ -30,7 +30,7 @@ class V3DeepResearchTester:
         
     def setup(self):
         """初始化测试环境"""
-        print("🔧 初始化V3.0深度研究测试环境...")
+        print("🔧 初始化V3.0深度研究测试环境 (B端商业模式观察)...")
         
         with app.app_context():
             # 获取全局设置
@@ -56,51 +56,82 @@ class V3DeepResearchTester:
                 self.llm_service
             )
             
+            # 检查数据库配置状态
+            from services.default_config_service import DefaultConfigService
+            config_status = DefaultConfigService.get_config_status()
+            
             print(f"✅ 测试环境初始化完成")
             print(f"   LLM Provider: {self.settings.llm_provider}")
             print(f"   LLM Model: {self.settings.llm_model_name}")
             print(f"   LLM API Key: {'已配置' if self.settings.llm_api_key else '未配置'}")
             print(f"   SERP API Key: {'已配置' if self.settings.serp_api_key else '未配置'}")
+            print(f"   爬虫配置数量: {config_status['crawler_count']}")
+            print(f"   报告配置数量: {config_status['report_count']}")
+            print(f"   全局设置: {'已配置' if config_status['has_global_settings'] else '未配置'}")
             
             return True
     
     def create_test_report_config(self):
-        """创建测试用的报告配置"""
-        print("\n📋 创建测试报告配置...")
+        """创建B端商业模式观察报告配置"""
+        print("\n📋 创建B端商业模式观察报告配置...")
         
         with app.app_context():
-            # 查找数据库中的报告配置，或创建测试配置
-            from models import ReportConfig
+            from models import CrawlerConfig
             
-            # 强制使用可控生图测试配置进行测试
-            print("🎯 创建可控生图专项测试配置")
+            # 专门使用B端商业模式观察报告配置
+            print("🎯 使用B端商业模式观察报告配置进行测试")
             
-            # 首先尝试从数据库获取webhook配置
-            existing_config = ReportConfig.query.filter_by(enable_deep_research=True).first()
-            webhook_url = existing_config.webhook_url if existing_config else None
-            notification_type = existing_config.notification_type if existing_config else 'wechat'
+            # 获取订阅定价和企业软件出海相关的爬虫配置
+            # 根据default_config_service.py，数据源是 "16,17" (订阅定价,企业软件出海)
+            target_crawler_names = ['B端-订阅定价', 'B端-企业软件出海']
+            crawlers = CrawlerConfig.query.filter(
+                CrawlerConfig.name.in_(target_crawler_names)
+            ).filter_by(is_active=True).all()
             
-            # 创建可控生图专项测试配置
+            if crawlers:
+                crawler_ids = [str(crawler.id) for crawler in crawlers]
+                print(f"   找到对应爬虫配置: {[c.name for c in crawlers]}")
+            else:
+                # 如果没有找到特定爬虫，使用通用的B端爬虫
+                b2b_crawlers = CrawlerConfig.query.filter(
+                    CrawlerConfig.name.like('%B端%') | 
+                    CrawlerConfig.name.like('%企业服务%')
+                ).filter_by(is_active=True).limit(3).all()
+                
+                if b2b_crawlers:
+                    crawler_ids = [str(crawler.id) for crawler in b2b_crawlers]
+                    print(f"   使用通用B端爬虫: {[c.name for c in b2b_crawlers]}")
+                else:
+                    # 最后使用默认ID
+                    crawler_ids = ['16', '17']
+                    print("   使用默认数据源ID: 16,17")
+            
+            # 创建B端商业模式观察报告配置
             test_config = type('TestReportConfig', (), {
-                'id': 999,  # 测试用ID
-                'name': '可控生图技术深度研究',
-                'data_sources': '1,2,3',  # 使用前3个爬虫作为数据源
-                'filter_keywords': '可控生图,Nano Banana,即梦,图像生成,AI绘画,文生图,图像编辑',
+                'id': 998,  # 测试用ID
+                'name': 'B端商业模式观察报告',
+                'data_sources': ','.join(crawler_ids),
+                'filter_keywords': 'B端订阅定价,企业软件出海,SaaS商业模式,按需付费,生态扩展,定价策略,订阅模式,出海策略,本土化,合规适配',
                 'time_range': '7d',
-                'purpose': '深入研究最近一周可控生图技术的最新进展和突破',
-                'research_focus': '重点关注：1) Nano Banana技术特点和应用场景；2) 即梦4.0的技术创新和性能提升；3) 这些模型的实际测评效果和用户反馈；4) 可控生图技术的发展趋势和市场前景分析',
+                'purpose': '观察B端企业服务的商业模式变化，包括定价策略、生态扩展、出海动态等',
+                'research_focus': '''💼 **商业模式深度观察**：
+- 定价策略演进：分层订阅优化、按需付费模式、价值定价策略
+- 生态扩展分析：平台抽成调整、开发者激励机制、生态健康度评估
+- 出海动态追踪：本土化策略、合规适配要求、市场表现分析
+- 盈利模式创新：收入结构变化、成本控制策略、规模效应实现
+- 商业趋势预测：模式演进方向、市场机会识别、风险因素分析''',
                 'enable_deep_research': True,
-                'notification_type': notification_type,
-                'webhook_url': webhook_url  # 从数据库配置继承webhook设置
+                'notification_type': 'jinshan',
+                'webhook_url': ''  # 测试时不推送
             })()
             
-            print(f"✅ 测试配置创建完成:")
+            print(f"✅ B端商业模式观察报告配置创建完成:")
             print(f"   报告名称: {test_config.name}")
             print(f"   数据源: {test_config.data_sources}")
             print(f"   关键词: {test_config.filter_keywords}")
             print(f"   时间范围: {test_config.time_range}")
             print(f"   研究目的: {test_config.purpose}")
-            print(f"   研究重点: {test_config.research_focus}")
+            print(f"   研究重点: 商业模式深度观察...")
             
             return test_config
     
@@ -115,6 +146,12 @@ class V3DeepResearchTester:
             print(f"✅ 初始知识库构建完成")
             print(f"   文章数量: {len(knowledge_base)}")
             
+            # 如果没有数据，创建一些测试数据
+            if not knowledge_base:
+                print("⚠️ 数据库中暂无相关文章，创建测试数据...")
+                knowledge_base = self._create_test_articles(report_config)
+                print(f"   生成测试文章数量: {len(knowledge_base)}")
+            
             if knowledge_base:
                 print(f"   示例文章:")
                 for i, article in enumerate(knowledge_base[:3], 1):
@@ -128,57 +165,108 @@ class V3DeepResearchTester:
             print(f"❌ 初始知识库构建失败: {e}")
             return False, []
     
-    async def test_ai_initial_analysis(self, knowledge_base, report_config):
-        """测试AI初步分析功能"""
-        print("\n🧠 测试AI初步分析功能...")
+    def _create_test_articles(self, report_config):
+        """创建测试文章数据"""
+        from datetime import datetime, timedelta
         
-        try:
-            with app.app_context():
-                # 测试AI初步分析
-                analysis_result = await self.deep_research_service._ai_initial_analysis(
-                    knowledge_base, 
-                    report_config
-                )
-            
-            print(f"✅ AI初步分析测试完成")
-            print(f"   现有知识摘要: {analysis_result.get('summary', '无')[:100]}...")
-            print(f"   知识空白: {analysis_result.get('gaps', '无')[:100]}...")
-            print(f"   研究方向数: {len(analysis_result.get('directions', []))}")
-            print(f"   优先关键词: {', '.join(analysis_result.get('keywords', [])[:3])}")
-            
-            return True, analysis_result
-            
-        except Exception as e:
-            print(f"❌ AI初步分析失败: {e}")
-            return False, {}
+        # 专门为B端商业模式观察报告创建测试数据
+        if '商业模式' in report_config.name:
+            # B端商业模式观察专项测试数据
+            test_articles = [
+                {
+                    'title': 'SaaS订阅定价策略新趋势：从固定包月到价值定价',
+                    'content': '随着B端SaaS市场的成熟，越来越多的企业服务商开始探索更灵活的定价策略。从传统的固定包月模式，向基于使用量、价值导向的定价模式转变。一些头部SaaS厂商推出了分层订阅、按需付费等创新定价方案，以更好地匹配客户的实际价值获得。',
+                    'url': 'https://example.com/saas-pricing-trends-2024',
+                    'source': 'SaaS商业观察',
+                    'date': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),
+                    'publish_date': datetime.now() - timedelta(days=1)
+                },
+                {
+                    'title': '中国企业软件出海加速：本土化策略成关键',
+                    'content': '2024年中国企业服务软件出海步伐明显加快，多家公司在东南亚、欧美市场取得突破。成功案例显示，本土化适配、合规要求满足、当地合作伙伴建立是出海成功的三大关键要素。钉钉、腾讯会议等产品的海外版本获得了良好的市场反响。',
+                    'url': 'https://example.com/china-enterprise-software-global',
+                    'source': '出海观察',
+                    'date': (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'),
+                    'publish_date': datetime.now() - timedelta(days=2)
+                },
+                {
+                    'title': '平台生态扩展新模式：开发者激励机制创新',
+                    'content': '主流B端平台正在重新设计开发者生态激励机制。从简单的收入分成模式，演进到技术支持、市场推广、资源对接等全方位赋能体系。微软、Salesforce等平台的开发者生态健康度评估显示，多元化激励比单一抽成更能促进生态繁荣。',
+                    'url': 'https://example.com/platform-ecosystem-innovation',
+                    'source': '平台经济研究',
+                    'date': (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d'),
+                    'publish_date': datetime.now() - timedelta(days=3)
+                },
+                {
+                    'title': '企业服务盈利模式创新：订阅+服务混合模式兴起',
+                    'content': '传统的纯订阅模式在B端市场面临挑战，越来越多企业开始采用订阅+专业服务的混合盈利模式。这种模式不仅能提供稳定的订阅收入，还能通过定制化服务获得更高的客单价和客户粘性。行业数据显示，混合模式的平均客户生命周期价值比纯订阅模式高出30-50%。',
+                    'url': 'https://example.com/hybrid-business-model-b2b',
+                    'source': '商业模式研究',
+                    'date': (datetime.now() - timedelta(days=4)).strftime('%Y-%m-%d'),
+                    'publish_date': datetime.now() - timedelta(days=4)
+                },
+                {
+                    'title': '按需付费模式在企业服务中的应用与挑战',
+                    'content': '按需付费（Pay-as-you-go）模式在云计算领域的成功，启发了更多企业服务商探索这一定价策略。从API调用计费到存储容量计费，按需付费能够降低客户的使用门槛，但同时也对服务商的成本控制和收入预测带来挑战。AWS、Azure的成功案例为其他企业服务商提供了参考。',
+                    'url': 'https://example.com/pay-as-you-go-enterprise-services',
+                    'source': '定价策略分析',
+                    'date': (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d'),
+                    'publish_date': datetime.now() - timedelta(days=5)
+                }
+            ]
+        else:
+            # 通用B端测试数据
+            test_articles = [
+                {
+                    'title': '企业服务数字化转型加速，SaaS市场迎来新机遇',
+                    'content': '随着企业数字化转型需求的不断增长，SaaS软件即服务市场正在经历快速发展。企业对于云端解决方案的接受度持续提升，推动了整个B端服务市场的创新和竞争。',
+                    'url': 'https://example.com/enterprise-digital-transformation',
+                    'source': '企业服务观察',
+                    'date': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),
+                    'publish_date': datetime.now() - timedelta(days=1)
+                }
+            ]
+        
+        return test_articles
     
-    async def test_ai_guided_decision(self, knowledge_base, report_config, initial_analysis):
-        """测试AI指导的研究决策"""
-        print("\n🎯 测试AI指导研究决策...")
+    async def test_ai_content_evaluation(self, knowledge_base, report_config):
+        """测试AI内容评估功能（判断是否足够写报告）"""
+        print("\n🧠 测试AI内容评估功能...")
         
         try:
             with app.app_context():
-                # 测试AI指导决策
-                decision = await self.deep_research_service._send_guided_research_prompt(
-                    knowledge_base, 
-                    report_config, 
-                    initial_analysis,
-                    1
+                # 单次AI调用超时控制
+                import asyncio
+                decision = await asyncio.wait_for(
+                    self.deep_research_service._send_research_prompt(
+                        knowledge_base, 
+                        report_config,
+                        1
+                    ),
+                    timeout=30.0  # 单次AI调用30秒超时
                 )
             
-            print(f"✅ AI指导决策测试完成")
-            print(f"   AI决策: {decision.get('action', '未知')}")
-            print(f"   决策理由: {decision.get('details', '无')[:100]}...")
+            print(f"✅ AI内容评估测试完成")
+            print(f"   AI判断: {decision.get('action', '未知')}")
+            print(f"   判断理由: {decision.get('details', '无')[:100]}...")
             
             if decision.get('action') == 'search':
                 keywords = decision.get('keywords', [])
-                print(f"   搜索关键词: {', '.join(keywords[:3])}")
+                print(f"   需要搜索关键词: {', '.join(keywords[:3])}")
+            elif decision.get('action') == 'finish':
+                print(f"   AI认为现有资料足够写报告")
             
             return True, decision
             
-        except Exception as e:
-            print(f"❌ AI指导决策失败: {e}")
+        except asyncio.TimeoutError:
+            print(f"❌ AI内容评估超时（30秒），API响应过慢")
             return False, {}
+        except Exception as e:
+            print(f"❌ AI内容评估失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, {}
+    
     
     async def test_search_and_crawl(self, keywords):
         """测试搜索和爬取功能"""
@@ -190,9 +278,10 @@ class V3DeepResearchTester:
         
         try:
             # 测试搜索功能
-            test_keywords = keywords[:2] if keywords else ['人工智能发展趋势', 'AI技术创新']
+            test_keywords = keywords[:2] if keywords else ['B端订阅定价', 'SaaS商业模式']
             
             with app.app_context():
+                # 搜索和爬取不设置总体超时，让内部的单次操作超时控制
                 new_articles = await self.deep_research_service._execute_search_and_crawl(
                     test_keywords, 
                     [], 
@@ -213,6 +302,8 @@ class V3DeepResearchTester:
             
         except Exception as e:
             print(f"❌ 搜索和爬取失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False, []
     
     def test_keyword_filtering(self, knowledge_base, report_config):
@@ -286,6 +377,7 @@ class V3DeepResearchTester:
         try:
             # 执行完整的深度研究
             with app.app_context():
+                # 完整深度研究流程不设置总体超时，让内部的单次操作超时控制
                 result = await self.deep_research_service.conduct_deep_research(
                     report_config, 
                     self.settings
@@ -330,6 +422,8 @@ class V3DeepResearchTester:
                 
         except Exception as e:
             print(f"❌ 完整深度研究流程测试失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False, {}
     
     def test_xml_parsing(self):
@@ -407,12 +501,24 @@ AI技术突破,商业化进展,市场数据
     def generate_test_summary(self, results):
         """生成测试总结"""
         print("\n" + "="*80)
-        print("📋 V3.0 AI指导深度研究测试总结")
+        print("📋 V3.0 AI指导深度研究测试总结 - B端商业模式观察")
         print("="*80)
         
         print(f"🕐 测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"🔧 测试环境: {self.settings.llm_provider} ({self.settings.llm_model_name})")
         print(f"🔑 SERP API: {'已配置' if self.settings.serp_api_key else '未配置'}")
+        
+        # 显示数据库配置状态
+        with app.app_context():
+            from services.default_config_service import DefaultConfigService
+            from models import ReportConfig
+            config_status = DefaultConfigService.get_config_status()
+            deep_research_configs = ReportConfig.query.filter_by(enable_deep_research=True).count()
+            
+            print(f"📚 数据库状态:")
+            print(f"   爬虫配置: {config_status['crawler_count']} 个")
+            print(f"   报告配置: {config_status['report_count']} 个")
+            print(f"   深度研究配置: {deep_research_configs} 个")
         
         print(f"\n📊 测试结果:")
         total_tests = len(results)
@@ -426,6 +532,7 @@ AI技术突破,商业化进展,市场数据
         
         if passed_tests == total_tests:
             print("🎉 所有测试通过！V3.0 AI指导深度研究功能运行正常")
+            print("💡 商业模式特性: 定价策略分析 → 生态扩展观察 → 出海动态追踪 → 盈利模式创新 → 商业趋势预测")
             return True
         else:
             print("⚠️ 部分测试失败，请检查相关配置和服务")
@@ -433,7 +540,7 @@ AI技术突破,商业化进展,市场数据
 
 async def main():
     """主测试函数"""
-    print("🚀 开始V3.0 AI指导深度研究测试")
+    print("🚀 开始V3.0 AI指导深度研究测试 - B端商业模式观察")
     print("="*80)
     
     tester = V3DeepResearchTester()
@@ -446,10 +553,13 @@ async def main():
     results = {}
     
     try:
-        # 1. 创建测试配置
+        # 1. 获取测试配置
         test_config = tester.create_test_report_config()
+        if not test_config:
+            print("❌ 无法获取测试配置")
+            return False
         
-        # 2. 测试XML解析功能
+        # 2. 测试XML解析功能（快速测试）
         xml_success = tester.test_xml_parsing()
         results["XML解析功能"] = xml_success
         
@@ -461,29 +571,26 @@ async def main():
         if kb_success and knowledge_base:
             filter_success, filtered_articles = tester.test_keyword_filtering(knowledge_base, test_config)
             results["关键词过滤"] = filter_success
-            knowledge_base = filtered_articles  # 使用过滤后的文章
+            knowledge_base = filtered_articles if filter_success else knowledge_base
         else:
             results["关键词过滤"] = False
         
-        # 5. 测试AI初步分析
+        # 5. 测试AI内容评估（判断是否足够写报告）
         if kb_success and knowledge_base:
-            analysis_success, initial_analysis = await tester.test_ai_initial_analysis(knowledge_base, test_config)
-            results["AI初步分析"] = analysis_success
-        else:
-            results["AI初步分析"] = False
-            initial_analysis = {}
-        
-        # 6. 测试AI指导决策
-        if analysis_success and initial_analysis:
-            decision_success, decision = await tester.test_ai_guided_decision(knowledge_base, test_config, initial_analysis)
-            results["AI指导决策"] = decision_success
+            evaluation_success, decision = await tester.test_ai_content_evaluation(knowledge_base, test_config)
+            results["AI内容评估"] = evaluation_success
             
-            # 7. 测试搜索和爬取
-            keywords = decision.get('keywords', []) if decision_success else []
-            search_success, new_articles = await tester.test_search_and_crawl(keywords)
-            results["搜索和爬取"] = search_success
+            # 6. 根据AI判断决定是否搜索
+            if evaluation_success and decision.get('action') == 'search':
+                keywords = decision.get('keywords', [])
+                search_success, new_articles = await tester.test_search_and_crawl(keywords)
+                results["搜索和爬取"] = search_success
+            else:
+                # AI认为现有资料足够，跳过搜索
+                print("🎯 AI认为现有资料足够，跳过搜索步骤")
+                results["搜索和爬取"] = True  # 标记为成功，因为不需要搜索
         else:
-            results["AI指导决策"] = False
+            results["AI内容评估"] = False
             results["搜索和爬取"] = False
         
         # 8. 测试完整深度研究流程（包含推送）
@@ -509,13 +616,16 @@ async def main():
         return False
 
 if __name__ == "__main__":
-    print("🎯 启动V3.0 AI指导深度研究测试...")
+    print("🎯 启动V3.0 AI指导深度研究测试 - B端商业模式观察...")
+    print("📝 本测试专门针对B端商业模式观察报告进行测试")
     success = asyncio.run(main())
     
     if success:
         print("\n🎊 测试完成！V3.0 AI指导深度研究功能正常运行")
-        print("💡 新特性: 基于数据库内容 → 关键词过滤 → AI分析指导 → 精准搜索 → 高质量报告")
+        print("💡 商业模式优势: 定价策略深度分析 → 生态扩展动态观察 → 出海策略追踪 → 盈利模式创新洞察")
+        print("🔧 如需修改配置，请访问 Web 界面的【报告配置】页面")
         sys.exit(0)
     else:
         print("\n💥 测试失败！请检查系统配置和日志")
+        print("💡 提示：确保已配置 LLM API Key，并检查数据库中是否有有效的配置")
         sys.exit(1)

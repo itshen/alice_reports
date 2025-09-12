@@ -49,10 +49,343 @@ from services.crawler_service import CrawlerService
 from services.llm_service import LLMService
 from services.notification_service import NotificationService
 from services.default_config_service import DefaultConfigService
+from services.deep_research_service import DeepResearchService
 
 crawler_service = CrawlerService()
 llm_service = LLMService()
 notification_service = NotificationService()
+deep_research_service = DeepResearchService(crawler_service, llm_service)
+
+def crawler_job_wrapper(crawler_id):
+    """爬虫任务包装器，用于调度器调用"""
+    try:
+        logger.info(f"调度器触发爬虫任务，ID: {crawler_id}")
+        
+        with app.app_context():
+            crawler = CrawlerConfig.query.get(crawler_id)
+            if not crawler:
+                logger.error(f"未找到爬虫配置，ID: {crawler_id}")
+                return
+            
+            if not crawler.is_active:
+                logger.info(f"爬虫 {crawler.name} 已禁用，跳过执行")
+                return
+            
+            # 立即更新开始执行时间
+            crawler.last_run = datetime.utcnow()
+            db.session.commit()
+            logger.info(f"✅ 定时任务开始执行: {crawler.name}")
+            
+            # 在新线程中执行异步任务
+            def run_async_task():
+                try:
+                    with app.app_context():
+                        # 重新获取爬虫配置（避免会话问题）
+                        current_crawler = CrawlerConfig.query.get(crawler_id)
+                        if not current_crawler:
+                            logger.error(f"定时任务线程中未找到爬虫配置，ID: {crawler_id}")
+                            return
+                        
+                        results = asyncio.run(crawler_service.run_crawler_task(current_crawler))
+                        if isinstance(results, dict) and results.get('success'):
+                            logger.info(f"定时爬虫任务完成: {current_crawler.name}, 成功保存 {results.get('saved_count', 0)} 条记录")
+                        else:
+                            logger.warning(f"定时爬虫任务异常: {current_crawler.name}, 结果: {results}")
+                except Exception as e:
+                    logger.error(f"定时爬虫任务执行失败: 爬虫ID {crawler_id}, 错误: {e}")
+                    # 即使失败也要确保有执行时间记录
+                    try:
+                        with app.app_context():
+                            failed_crawler = CrawlerConfig.query.get(crawler_id)
+                            if failed_crawler:
+                                failed_crawler.last_run = datetime.utcnow()
+                                db.session.commit()
+                                logger.info(f"✅ 已更新失败的定时爬虫执行时间: {failed_crawler.name}")
+                    except Exception as update_e:
+                        logger.error(f"更新失败的定时爬虫执行时间失败: {update_e}")
+            
+            import threading
+            thread = threading.Thread(target=run_async_task)
+            thread.start()
+            
+    except Exception as e:
+        logger.error(f"调度器任务包装器失败: {e}")
+
+def report_job_wrapper(report_id):
+    """报告任务包装器，用于调度器调用"""
+    try:
+        logger.info(f"调度器触发报告任务，ID: {report_id}")
+        
+        with app.app_context():
+            report = ReportConfig.query.get(report_id)
+            if not report:
+                logger.error(f"未找到报告配置，ID: {report_id}")
+                return
+            
+            if not report.is_active:
+                logger.info(f"报告 {report.name} 已禁用，跳过执行")
+                return
+            
+            if not report.enable_scheduled_push:
+                logger.info(f"报告 {report.name} 未启用定时推送，跳过执行")
+                return
+            
+            # 立即更新开始执行时间
+            report.last_run = datetime.utcnow()
+            db.session.commit()
+            logger.info(f"✅ 定时报告任务开始执行: {report.name}")
+            
+            # 在新线程中执行异步任务
+            def run_async_task():
+                try:
+                    with app.app_context():
+                        # 重新获取报告配置（避免会话问题）
+                        current_report = ReportConfig.query.get(report_id)
+                        if not current_report:
+                            logger.error(f"定时任务线程中未找到报告配置，ID: {report_id}")
+                            return
+                        
+                        # 执行报告生成任务（复用现有逻辑）
+                        generate_report_task_internal(current_report)
+                        
+                except Exception as e:
+                    logger.error(f"定时报告任务执行失败: 报告ID {report_id}, 错误: {e}")
+                    # 即使失败也要确保有执行时间记录
+                    try:
+                        with app.app_context():
+                            failed_report = ReportConfig.query.get(report_id)
+                            if failed_report:
+                                failed_report.last_run = datetime.utcnow()
+                                db.session.commit()
+                                logger.info(f"✅ 已更新失败的定时报告执行时间: {failed_report.name}")
+                    except Exception as update_e:
+                        logger.error(f"更新失败的定时报告执行时间失败: {update_e}")
+            
+            import threading
+            thread = threading.Thread(target=run_async_task)
+            thread.start()
+            
+    except Exception as e:
+        logger.error(f"调度器报告任务包装器失败: {e}")
+
+def setup_crawler_scheduler():
+    """设置爬虫自动调度任务"""
+    try:
+        logger.info("正在设置爬虫自动调度任务...")
+        
+        crawlers = CrawlerConfig.query.filter_by(is_active=True).all()
+        logger.info(f"发现 {len(crawlers)} 个激活的爬虫配置")
+        
+        for crawler in crawlers:
+            job_id = f"crawler_{crawler.id}"
+            
+            # 检查任务是否已存在
+            existing_job = scheduler.get_job(job_id)
+            if existing_job:
+                logger.info(f"任务已存在，先删除: {crawler.name}")
+                scheduler.remove_job(job_id)
+            
+            # 添加新的定时任务
+            try:
+                scheduler.add_job(
+                    func=crawler_job_wrapper,
+                    args=[crawler.id],
+                    trigger='interval',
+                    seconds=crawler.frequency_seconds,
+                    id=job_id,
+                    name=f"爬虫-{crawler.name}",
+                    replace_existing=True,
+                    max_instances=1  # 防止任务重叠
+                )
+                logger.info(f"已添加定时任务: {crawler.name} (每 {crawler.frequency_seconds//3600} 小时)")
+                
+            except Exception as e:
+                logger.error(f"添加任务失败: {crawler.name}, 错误: {e}")
+        
+        # 显示所有任务
+        jobs = scheduler.get_jobs()
+        logger.info(f"当前调度器中的任务数量: {len(jobs)}")
+        for job in jobs:
+            logger.info(f"调度任务: {job.name} (ID: {job.id})")
+            
+    except Exception as e:
+        logger.error(f"设置爬虫调度任务失败: {e}")
+
+def generate_report_task_internal(report):
+    """内部报告生成任务逻辑"""
+    try:
+        # 获取数据源
+        if not report.data_sources:
+            logger.warning(f"报告 {report.name} 没有配置数据源")
+            return
+        
+        crawler_ids = [int(x) for x in report.data_sources.split(',') if x.strip()]
+        
+        # 计算时间范围
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        time_range = report.time_range
+        
+        if time_range == '24h':
+            cutoff_time = now - timedelta(hours=24)
+        elif time_range == '2d':
+            cutoff_time = now - timedelta(days=2)
+        elif time_range == '3d':
+            cutoff_time = now - timedelta(days=3)
+        elif time_range == '7d':
+            cutoff_time = now - timedelta(days=7)
+        elif time_range == '14d':
+            cutoff_time = now - timedelta(days=14)
+        elif time_range == '30d':
+            cutoff_time = now - timedelta(days=30)
+        else:
+            cutoff_time = now - timedelta(hours=24)  # 默认24小时
+        
+        # 获取爬取的数据
+        articles = []
+        logger.info(f"准备从 {len(crawler_ids)} 个数据源获取数据，时间范围: {time_range}")
+        logger.info(f"时间过滤截止点: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        for crawler_id in crawler_ids:
+            # 按发布时间过滤（而不是爬取时间）
+            records = CrawlRecord.query.filter(
+                CrawlRecord.crawler_config_id == crawler_id,
+                CrawlRecord.status == 'success',
+                CrawlRecord.publish_date.isnot(None),  # 确保有发布时间
+                CrawlRecord.publish_date >= cutoff_time  # 按发布时间过滤
+            ).order_by(
+                CrawlRecord.publish_date.desc()
+            ).limit(100).all()
+            
+            if records:
+                latest_date = max(r.publish_date for r in records if r.publish_date)
+                earliest_date = min(r.publish_date for r in records if r.publish_date)
+                logger.info(f"数据源 {crawler_id} 获取到 {len(records)} 条记录，时间范围: {earliest_date.strftime('%Y-%m-%d')} 到 {latest_date.strftime('%Y-%m-%d')}")
+            else:
+                logger.info(f"数据源 {crawler_id} 获取到 0 条记录")
+            
+            for record in records:
+                articles.append({
+                    'title': record.title,
+                    'content': record.content,
+                    'author': record.author,
+                    'url': record.url,
+                    'date': record.publish_date.isoformat() if record.publish_date else ''
+                })
+        
+        logger.info(f"总共获取到 {len(articles)} 篇文章")
+        
+        # 过滤文章
+        if report.filter_keywords:
+            before_filter = len(articles)
+            articles = llm_service.filter_articles_by_keywords(articles, report.filter_keywords)
+            logger.info(f"关键词过滤: {before_filter} -> {len(articles)} 篇文章，关键词: {report.filter_keywords}")
+        
+        # 生成报告
+        if report.enable_deep_research:
+            # 使用优化后的深度研究服务
+            # 获取全局设置
+            settings = GlobalSettings.query.first()
+            if not settings:
+                raise Exception("未找到全局设置")
+            
+            # 确保LLM服务配置正确
+            llm_service.update_settings(settings)
+            
+            # 执行深度研究
+            result = asyncio.run(deep_research_service.conduct_deep_research(report, settings))
+            
+            if result['success']:
+                content = result['report']
+                
+                # 保存详细的研究日志
+                research_log = result.get('research_log', [])
+                iterations = result.get('iterations', 0)
+                knowledge_base_size = result.get('knowledge_base_size', 0)
+                
+                logger.info(f"深度研究完成: {iterations}轮迭代, {knowledge_base_size}篇文章, {len(research_log)}条日志")
+            else:
+                raise Exception(f"深度研究失败: {result['message']}")
+        else:
+            logger.info(f"生成常规报告，使用 {len(articles)} 篇文章")
+            # 确保LLM服务配置正确
+            settings = GlobalSettings.query.first()
+            if not settings:
+                raise Exception("未找到全局设置")
+            
+            llm_service.update_settings(settings)
+            content = llm_service.generate_simple_report(articles, report)
+            logger.info(f"常规报告生成完成，长度: {len(content)} 字符")
+        
+        # 保存报告记录
+        record = ReportRecord(
+            report_config_id=report.id,
+            title=f"{report.name} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            content=content,
+            summary=content[:200] + '...' if len(content) > 200 else content,
+            status='success'
+        )
+        db.session.add(record)
+        
+        # 发送通知
+        logger.info(f"检查推送配置 - webhook_url: {bool(report.webhook_url)}, notification_type: {report.notification_type}")
+        
+        if report.webhook_url:
+            logger.info(f"开始推送通知到 {report.notification_type}")
+            
+            if report.enable_deep_research:
+                notification_content = notification_service.format_deep_research_for_notification(content)
+            else:
+                notification_content = notification_service.format_simple_report_for_notification(content)
+            
+            success = notification_service.send_notification(
+                report.notification_type,
+                report.webhook_url,
+                notification_content,
+                record.title
+            )
+            record.notification_sent = success
+            logger.info(f"推送结果: {'成功' if success else '失败'}")
+        else:
+            logger.info("未配置 webhook_url，跳过推送")
+            record.notification_sent = False
+        
+        report.last_run = datetime.utcnow()
+        db.session.commit()
+        
+    except Exception as e:
+        logger.error(f"生成报告任务失败: {e}")
+        # 保存失败记录
+        record = ReportRecord(
+            report_config_id=report.id,
+            title=f"{report.name} - {datetime.now().strftime('%Y-%m-%d %H:%M')} (失败)",
+            status='failed',
+            error_message=str(e)
+        )
+        db.session.add(record)
+        db.session.commit()
+        raise
+
+def setup_report_scheduler():
+    """设置报告定时推送任务"""
+    try:
+        logger.info("正在设置报告定时推送任务...")
+        
+        reports = ReportConfig.query.filter_by(is_active=True, enable_scheduled_push=True).all()
+        logger.info(f"发现 {len(reports)} 个启用定时推送的报告配置")
+        
+        for report in reports:
+            update_report_job(report)
+        
+        # 显示所有任务
+        jobs = scheduler.get_jobs()
+        report_jobs = [job for job in jobs if job.id.startswith('report_')]
+        logger.info(f"当前报告定时任务数量: {len(report_jobs)}")
+        for job in report_jobs:
+            logger.info(f"报告定时任务: {job.name} (ID: {job.id})")
+            
+    except Exception as e:
+        logger.error(f"设置报告定时任务失败: {e}")
 
 def create_tables():
     """创建数据库表"""
@@ -62,6 +395,12 @@ def create_tables():
     logger.info("正在初始化默认配置...")
     DefaultConfigService.init_default_configs()
     logger.info("默认配置初始化完成")
+    
+    # 设置爬虫自动调度
+    setup_crawler_scheduler()
+    
+    # 设置报告定时推送
+    setup_report_scheduler()
 
 # 认证装饰器
 def login_required(f):
@@ -207,9 +546,12 @@ def crawler_config_edit(crawler_id):
 def crawler_results(crawler_id):
     """查看爬虫抓取结果"""
     crawler = CrawlerConfig.query.get_or_404(crawler_id)
-    # 获取最近的抓取记录，按时间倒序
+    # 获取最近的抓取记录，按发布时间倒序（最新的文章在前面）
     records = CrawlRecord.query.filter_by(crawler_config_id=crawler_id)\
-                              .order_by(CrawlRecord.created_at.desc())\
+                              .order_by(
+                                  CrawlRecord.publish_date.desc().nulls_last(),
+                                  CrawlRecord.created_at.desc()
+                              )\
                               .limit(50).all()
     
     # 检查是否是 Dashboard 内的 AJAX 请求
@@ -233,6 +575,36 @@ def crawler_config_edit_form(crawler_id):
     crawler = CrawlerConfig.query.get_or_404(crawler_id)
     return render_template('crawler_config_detail.html', crawler=crawler)
 
+def update_crawler_job(crawler):
+    """更新单个爬虫的调度任务"""
+    try:
+        job_id = f"crawler_{crawler.id}"
+        
+        # 删除旧任务
+        existing_job = scheduler.get_job(job_id)
+        if existing_job:
+            scheduler.remove_job(job_id)
+            logger.info(f"已删除旧调度任务: {crawler.name}")
+        
+        # 如果爬虫处于激活状态，添加新任务
+        if crawler.is_active:
+            scheduler.add_job(
+                func=crawler_job_wrapper,
+                args=[crawler.id],
+                trigger='interval',
+                seconds=crawler.frequency_seconds,
+                id=job_id,
+                name=f"爬虫-{crawler.name}",
+                replace_existing=True,
+                max_instances=1
+            )
+            logger.info(f"已更新调度任务: {crawler.name} (每 {crawler.frequency_seconds//3600} 小时)")
+        else:
+            logger.info(f"爬虫已禁用，不添加调度任务: {crawler.name}")
+            
+    except Exception as e:
+        logger.error(f"更新爬虫调度任务失败: {crawler.name}, 错误: {e}")
+
 @app.route('/api/crawler-config', methods=['POST'])
 @login_required
 def save_crawler_config():
@@ -255,6 +627,9 @@ def save_crawler_config():
             db.session.add(crawler)
         
         db.session.commit()
+        
+        # 更新调度任务
+        update_crawler_job(crawler)
         
         return jsonify({'success': True, 'message': '保存成功', 'id': crawler.id})
     
@@ -463,6 +838,54 @@ def report_config_edit_form(report_id):
     crawlers = CrawlerConfig.query.all()
     return render_template('report_config_detail.html', report=report, crawlers=crawlers)
 
+def update_report_job(report):
+    """更新单个报告的定时推送任务"""
+    try:
+        job_id = f"report_{report.id}"
+        
+        # 删除旧任务
+        existing_job = scheduler.get_job(job_id)
+        if existing_job:
+            scheduler.remove_job(job_id)
+            logger.info(f"已删除旧的报告定时任务: {report.name}")
+        
+        # 如果启用了定时推送，添加新任务
+        if report.is_active and report.enable_scheduled_push and report.schedule_weekdays and report.schedule_time:
+            # 解析工作日配置
+            weekdays = [int(day.strip()) for day in report.schedule_weekdays.split(',') if day.strip()]
+            # 转换为cron格式的星期（0=周日，1=周一...6=周六）
+            cron_weekdays = [(day % 7) for day in weekdays]
+            
+            # 解析时间
+            try:
+                hour, minute = map(int, report.schedule_time.split(':'))
+            except ValueError:
+                logger.error(f"报告 {report.name} 的时间格式错误: {report.schedule_time}")
+                return
+            
+            scheduler.add_job(
+                func=report_job_wrapper,
+                args=[report.id],
+                trigger='cron',
+                hour=hour,
+                minute=minute,
+                day_of_week=','.join(map(str, cron_weekdays)),
+                timezone='Asia/Shanghai',  # 使用+8时区
+                id=job_id,
+                name=f"报告-{report.name}",
+                replace_existing=True,
+                max_instances=1
+            )
+            
+            weekday_names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+            selected_days = [weekday_names[day % 7] for day in weekdays]
+            logger.info(f"已添加报告定时任务: {report.name} ({','.join(selected_days)} {report.schedule_time})")
+        else:
+            logger.info(f"报告定时推送已禁用或配置不完整: {report.name}")
+            
+    except Exception as e:
+        logger.error(f"更新报告定时任务失败: {report.name}, 错误: {e}")
+
 @app.route('/api/report-config', methods=['POST'])
 @login_required
 def save_report_config():
@@ -486,10 +909,19 @@ def save_report_config():
         report.notification_type = data.get('notification_type', 'wechat')
         report.webhook_url = data.get('webhook_url', '')
         
+        # 定时推送配置
+        report.enable_scheduled_push = data.get('enable_scheduled_push', False)
+        report.schedule_weekdays = data.get('schedule_weekdays', '1,2,3,4,5')
+        report.schedule_time = data.get('schedule_time', '09:00')
+        report.timezone = data.get('timezone', 'Asia/Shanghai')
+        
         if not report.id:
             db.session.add(report)
         
         db.session.commit()
+        
+        # 更新定时任务
+        update_report_job(report)
         
         return jsonify({'success': True, 'message': '保存成功', 'id': report.id})
     
@@ -509,6 +941,9 @@ def toggle_crawler_status(crawler_id):
         crawler.is_active = is_active
         db.session.commit()
         
+        # 更新调度任务
+        update_crawler_job(crawler)
+        
         return jsonify({'success': True, 'message': '状态更新成功'})
     
     except Exception as e:
@@ -522,39 +957,51 @@ def run_crawler_once(crawler_id):
     try:
         crawler = CrawlerConfig.query.get_or_404(crawler_id)
         
+        # 立即更新开始执行时间
+        crawler.last_run = datetime.utcnow()
+        db.session.commit()
+        logger.info(f"✅ 已更新爬虫 {crawler.name} 的开始执行时间")
+        
         # 在后台执行爬虫任务
         def run_crawler_task():
-            with app.app_context():
-                try:
-                    results = asyncio.run(crawler_service.run_crawler_task(crawler))
-                    
-                    # 保存爬取结果到数据库
-                    for result in results:
-                        if result['success']:
-                            record = CrawlRecord(
-                                crawler_config_id=crawler.id,
-                                url=result['url'],
-                                title=result.get('title', ''),
-                                content=result.get('content', ''),
-                                author=result.get('author', ''),
-                                publish_date=None,  # 可以解析日期
-                                status='success'
-                            )
+            try:
+                logger.info(f"开始启动爬虫线程: {crawler.name}")
+                
+                with app.app_context():
+                    try:
+                        # 重新获取爬虫配置（避免会话问题）
+                        current_crawler = CrawlerConfig.query.get(crawler_id)
+                        if not current_crawler:
+                            logger.error(f"线程中未找到爬虫配置，ID: {crawler_id}")
+                            return
+                        
+                        logger.info(f"线程中执行爬虫任务: {current_crawler.name}")
+                        results = asyncio.run(crawler_service.run_crawler_task(current_crawler))
+                        
+                        # 新的爬虫服务已经在爬取过程中边爬边存了
+                        if isinstance(results, dict) and results.get('success'):
+                            logger.info(f"爬虫任务完成: 成功保存 {results.get('saved_count', 0)} 条记录，失败 {results.get('failed_count', 0)} 条")
                         else:
-                            record = CrawlRecord(
-                                crawler_config_id=crawler.id,
-                                url=result['url'],
-                                status='failed',
-                                error_message=result.get('error', '')
-                            )
-                        db.session.add(record)
-                    
-                    crawler.last_run = datetime.utcnow()
-                    db.session.commit()
-                    
-                except Exception as e:
-                    logger.error(f"执行爬虫任务失败: {e}")
-                    db.session.rollback()
+                            # 兼容旧的返回格式（如果有的话）
+                            logger.info(f"爬虫任务完成，结果格式: {type(results)}")
+                        
+                    except Exception as e:
+                        logger.error(f"执行爬虫任务失败: {e}")
+                        logger.exception("详细错误信息:")
+                        # 即使失败也要确保有执行时间记录
+                        try:
+                            with app.app_context():
+                                failed_crawler = CrawlerConfig.query.get(crawler_id)
+                                if failed_crawler:
+                                    failed_crawler.last_run = datetime.utcnow()
+                                    db.session.commit()
+                                    logger.info(f"✅ 已更新失败爬虫 {failed_crawler.name} 的执行时间")
+                        except Exception as update_e:
+                            logger.error(f"更新失败爬虫执行时间失败: {update_e}")
+                        
+            except Exception as e:
+                logger.error(f"爬虫线程启动失败: {e}")
+                logger.exception("线程错误详情:")
         
         # 使用线程执行任务
         import threading
@@ -573,6 +1020,14 @@ def delete_crawler_config(crawler_id):
     """删除爬虫配置"""
     try:
         crawler = CrawlerConfig.query.get_or_404(crawler_id)
+        
+        # 先删除调度任务
+        job_id = f"crawler_{crawler_id}"
+        existing_job = scheduler.get_job(job_id)
+        if existing_job:
+            scheduler.remove_job(job_id)
+            logger.info(f"已删除调度任务: {crawler.name}")
+        
         db.session.delete(crawler)
         db.session.commit()
         
@@ -594,6 +1049,9 @@ def toggle_report_status(report_id):
         report.is_active = is_active
         db.session.commit()
         
+        # 更新定时任务
+        update_report_job(report)
+        
         return jsonify({'success': True, 'message': '状态更新成功'})
     
     except Exception as e:
@@ -610,94 +1068,157 @@ def generate_report_once(report_id):
         # 在后台执行报告生成任务
         def generate_report_task():
             try:
-                # 获取数据源
-                if not report.data_sources:
-                    return
-                
-                crawler_ids = [int(x) for x in report.data_sources.split(',') if x.strip()]
-                
-                # 获取爬取的数据
-                articles = []
-                for crawler_id in crawler_ids:
-                    records = CrawlRecord.query.filter_by(
-                        crawler_config_id=crawler_id,
-                        status='success'
-                    ).order_by(CrawlRecord.crawled_at.desc()).limit(50).all()
+                with app.app_context():
+                    # 获取数据源
+                    if not report.data_sources:
+                        return
                     
-                    for record in records:
-                        articles.append({
-                            'title': record.title,
-                            'content': record.content,
-                            'author': record.author,
-                            'url': record.url,
-                            'date': record.publish_date.isoformat() if record.publish_date else ''
-                        })
-                
-                # 过滤文章
-                if report.filter_keywords:
-                    articles = llm_service.filter_articles_by_keywords(articles, report.filter_keywords)
-                
-                # 生成报告
-                if report.enable_deep_research:
-                    # 使用通用深度研究服务
-                    with app.app_context():
-                        from services.deep_research_service import DeepResearchService
-                        deep_research_service = DeepResearchService(crawler_service, llm_service)
+                    crawler_ids = [int(x) for x in report.data_sources.split(',') if x.strip()]
+                    
+                    # 计算时间范围
+                    from datetime import datetime, timedelta
+                    now = datetime.utcnow()
+                    time_range = report.time_range
+                    
+                    if time_range == '24h':
+                        cutoff_time = now - timedelta(hours=24)
+                    elif time_range == '2d':
+                        cutoff_time = now - timedelta(days=2)
+                    elif time_range == '3d':
+                        cutoff_time = now - timedelta(days=3)
+                    elif time_range == '7d':
+                        cutoff_time = now - timedelta(days=7)
+                    elif time_range == '14d':
+                        cutoff_time = now - timedelta(days=14)
+                    elif time_range == '30d':
+                        cutoff_time = now - timedelta(days=30)
+                    else:
+                        cutoff_time = now - timedelta(hours=24)  # 默认24小时
+                    
+                    # 获取爬取的数据
+                    articles = []
+                    logger.info(f"准备从 {len(crawler_ids)} 个数据源获取数据，时间范围: {time_range}")
+                    logger.info(f"时间过滤截止点: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    for crawler_id in crawler_ids:
+                        # 按发布时间过滤（而不是爬取时间）
+                        records = CrawlRecord.query.filter(
+                            CrawlRecord.crawler_config_id == crawler_id,
+                            CrawlRecord.status == 'success',
+                            CrawlRecord.publish_date.isnot(None),  # 确保有发布时间
+                            CrawlRecord.publish_date >= cutoff_time  # 按发布时间过滤
+                        ).order_by(
+                            CrawlRecord.publish_date.desc()
+                        ).limit(100).all()
                         
+                        if records:
+                            latest_date = max(r.publish_date for r in records if r.publish_date)
+                            earliest_date = min(r.publish_date for r in records if r.publish_date)
+                            logger.info(f"数据源 {crawler_id} 获取到 {len(records)} 条记录，时间范围: {earliest_date.strftime('%Y-%m-%d')} 到 {latest_date.strftime('%Y-%m-%d')}")
+                        else:
+                            logger.info(f"数据源 {crawler_id} 获取到 0 条记录")
+                        
+                        for record in records:
+                            articles.append({
+                                'title': record.title,
+                                'content': record.content,
+                                'author': record.author,
+                                'url': record.url,
+                                'date': record.publish_date.isoformat() if record.publish_date else ''
+                            })
+                    
+                    logger.info(f"总共获取到 {len(articles)} 篇文章")
+                    
+                    # 过滤文章
+                    if report.filter_keywords:
+                        before_filter = len(articles)
+                        articles = llm_service.filter_articles_by_keywords(articles, report.filter_keywords)
+                        logger.info(f"关键词过滤: {before_filter} -> {len(articles)} 篇文章，关键词: {report.filter_keywords}")
+                    
+                    # 生成报告
+                    if report.enable_deep_research:
+                        # 使用优化后的深度研究服务
                         # 获取全局设置
                         settings = GlobalSettings.query.first()
                         if not settings:
                             raise Exception("未找到全局设置")
+                        
+                        # 确保LLM服务配置正确
+                        llm_service.update_settings(settings)
                         
                         # 执行深度研究
                         result = asyncio.run(deep_research_service.conduct_deep_research(report, settings))
                         
                         if result['success']:
                             content = result['report']
+                            
+                            # 保存详细的研究日志
+                            research_log = result.get('research_log', [])
+                            iterations = result.get('iterations', 0)
+                            knowledge_base_size = result.get('knowledge_base_size', 0)
+                            
+                            logger.info(f"深度研究完成: {iterations}轮迭代, {knowledge_base_size}篇文章, {len(research_log)}条日志")
                         else:
                             raise Exception(f"深度研究失败: {result['message']}")
-                else:
-                    content = llm_service.generate_simple_report(articles, report)
-                
-                # 保存报告记录
-                record = ReportRecord(
-                    report_config_id=report.id,
-                    title=f"{report.name} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                    content=content,
-                    summary=content[:200] + '...' if len(content) > 200 else content,
-                    status='success'
-                )
-                db.session.add(record)
-                
-                # 发送通知
-                if report.webhook_url:
-                    if report.enable_deep_research:
-                        notification_content = notification_service.format_deep_research_for_notification(content)
                     else:
-                        notification_content = notification_service.format_simple_report_for_notification(content)
+                        logger.info(f"生成常规报告，使用 {len(articles)} 篇文章")
+                        # 确保LLM服务配置正确
+                        settings = GlobalSettings.query.first()
+                        if not settings:
+                            raise Exception("未找到全局设置")
+                        
+                        llm_service.update_settings(settings)
+                        content = llm_service.generate_simple_report(articles, report)
+                        logger.info(f"常规报告生成完成，长度: {len(content)} 字符")
                     
-                    success = notification_service.send_notification(
-                        report.notification_type,
-                        report.webhook_url,
-                        notification_content,
-                        record.title
+                    # 保存报告记录
+                    record = ReportRecord(
+                        report_config_id=report.id,
+                        title=f"{report.name} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                        content=content,
+                        summary=content[:200] + '...' if len(content) > 200 else content,
+                        status='success'
                     )
-                    record.notification_sent = success
-                
-                report.last_run = datetime.utcnow()
-                db.session.commit()
+                    db.session.add(record)
+                    
+                    # 发送通知
+                    logger.info(f"检查推送配置 - webhook_url: {bool(report.webhook_url)}, notification_type: {report.notification_type}")
+                    
+                    if report.webhook_url:
+                        logger.info(f"开始推送通知到 {report.notification_type}")
+                        
+                        if report.enable_deep_research:
+                            notification_content = notification_service.format_deep_research_for_notification(content)
+                        else:
+                            notification_content = notification_service.format_simple_report_for_notification(content)
+                        
+                        success = notification_service.send_notification(
+                            report.notification_type,
+                            report.webhook_url,
+                            notification_content,
+                            record.title
+                        )
+                        record.notification_sent = success
+                        logger.info(f"推送结果: {'成功' if success else '失败'}")
+                    else:
+                        logger.info("未配置 webhook_url，跳过推送")
+                        record.notification_sent = False
+                    
+                    report.last_run = datetime.utcnow()
+                    db.session.commit()
                 
             except Exception as e:
                 logger.error(f"生成报告任务失败: {e}")
-                # 保存失败记录
-                record = ReportRecord(
-                    report_config_id=report.id,
-                    title=f"{report.name} - {datetime.now().strftime('%Y-%m-%d %H:%M')} (失败)",
-                    status='failed',
-                    error_message=str(e)
-                )
-                db.session.add(record)
-                db.session.commit()
+                with app.app_context():
+                    # 保存失败记录
+                    record = ReportRecord(
+                        report_config_id=report.id,
+                        title=f"{report.name} - {datetime.now().strftime('%Y-%m-%d %H:%M')} (失败)",
+                        status='failed',
+                        error_message=str(e)
+                    )
+                    db.session.add(record)
+                    db.session.commit()
         
         # 使用线程执行任务
         import threading
@@ -716,6 +1237,14 @@ def delete_report_config(report_id):
     """删除报告配置"""
     try:
         report = ReportConfig.query.get_or_404(report_id)
+        
+        # 先删除定时任务
+        job_id = f"report_{report_id}"
+        existing_job = scheduler.get_job(job_id)
+        if existing_job:
+            scheduler.remove_job(job_id)
+            logger.info(f"已删除报告定时任务: {report.name}")
+        
         db.session.delete(report)
         db.session.commit()
         

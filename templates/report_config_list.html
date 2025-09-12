@@ -102,9 +102,9 @@
                             <button 
                                 onclick="generateReportOnce({{ report.id }})"
                                 class="text-blue-600 hover:text-blue-900 transition-colors"
-                                title="立即生成一次"
+                                title="{% if report.enable_deep_research %}立即生成（深度研究）{% else %}立即生成{% endif %}"
                             >
-                                立即生成
+                                {% if report.enable_deep_research %}🧠 {% endif %}立即生成
                             </button>
                             <button 
                                 onclick="navigateToReportEdit({{ report.id }})"

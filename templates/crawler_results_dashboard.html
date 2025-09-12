@@ -68,7 +68,13 @@
                                 {% if record.status == 'success' %}成功{% else %}失败{% endif %}
                             </span>
                             <span class="text-xs text-gray-500">
-                                {{ record.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                {% if record.publish_date %}
+                                    {{ record.publish_date.strftime('%Y-%m-%d %H:%M') }}
+                                {% elif record.crawled_at %}
+                                    {{ record.crawled_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    {{ record.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% endif %}
                             </span>
                         </div>
                         
@@ -84,11 +90,6 @@
                             {% if record.author %}
                             <p class="text-sm text-gray-600 mb-1">
                                 <span class="font-medium">作者：</span>{{ record.author }}
-                            </p>
-                            {% endif %}
-                            {% if record.publish_date %}
-                            <p class="text-sm text-gray-600 mb-2">
-                                <span class="font-medium">发布时间：</span>{{ record.publish_date.strftime('%Y-%m-%d %H:%M') }}
                             </p>
                             {% endif %}
                             {% if record.content %}

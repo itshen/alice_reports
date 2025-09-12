@@ -4,8 +4,8 @@
 
 {% block body %}
 <div class="min-h-screen bg-gray-50" x-data="dashboardApp()">
-    <!-- 顶部导航栏 -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
+    <!-- 顶部导航栏 - 固定在页面顶部 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm border-b border-gray-200">
         <div class="px-6 py-4">
             <div class="flex justify-between items-center">
                 <!-- Logo和标题 -->
@@ -31,9 +31,11 @@
         </div>
     </nav>
 
-    <div class="flex">
-        <!-- 左侧菜单栏 -->
-        <aside class="w-64 bg-white shadow-sm min-h-screen">
+    <!-- 为固定顶部导航栏预留空间 -->
+    <div class="pt-20">
+        <div class="flex">
+            <!-- 左侧菜单栏 - 固定在页面左侧 -->
+            <aside class="fixed left-0 top-20 w-64 bg-white shadow-sm h-screen overflow-y-auto custom-scrollbar">
             <nav class="p-4 space-y-2">
                 <a 
                     href="#" 
@@ -74,8 +76,8 @@
             </nav>
         </aside>
 
-        <!-- 主内容区 -->
-        <main class="flex-1 p-6">
+            <!-- 主内容区 - 为左侧固定菜单栏预留空间 -->
+            <main class="flex-1 ml-64 p-6">
             <!-- 全局设置页面 -->
             <div x-show="currentPage === 'global-settings'" x-transition>
                 <div id="global-settings-content">
@@ -129,7 +131,8 @@
                     </div>
                 </div>
             </div>
-        </main>
+            </main>
+        </div>
     </div>
 </div>
 
@@ -214,11 +217,18 @@ function dashboardApp() {
                 scripts.forEach((script, index) => {
                     try {
                         console.log(`执行脚本 ${index + 1}:`, script.textContent.substring(0, 100) + '...');
-                        // 使用Function构造函数在全局作用域中执行
-                        const func = new Function(script.textContent);
+                        // 解码HTML实体并在全局作用域中执行
+                        let scriptContent = script.textContent;
+                        // 创建临时元素来解码HTML实体
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = scriptContent;
+                        scriptContent = tempDiv.textContent || tempDiv.innerText;
+                        
+                        const func = new Function(scriptContent);
                         func();
                     } catch (error) {
                         console.error('执行脚本失败:', error);
+                        console.error('脚本内容:', script.textContent.substring(0, 200));
                     }
                 });
                 
@@ -226,6 +236,28 @@ function dashboardApp() {
                 setTimeout(() => {
                     if (window.Alpine) {
                         console.log('重新初始化Alpine.js');
+                        
+                        // 检查特定页面的Alpine函数是否已定义
+                        const alpineContainer = contentElement.querySelector('[x-data]');
+                        if (alpineContainer) {
+                            const xDataValue = alpineContainer.getAttribute('x-data');
+                            console.log('检测到Alpine组件:', xDataValue);
+                            
+                            // 检查函数是否已定义
+                            if (xDataValue.includes('reportConfigApp') && typeof window.reportConfigApp !== 'function') {
+                                console.warn('reportConfigApp函数未定义，等待更长时间...');
+                                setTimeout(() => {
+                                    if (typeof window.reportConfigApp === 'function') {
+                                        console.log('reportConfigApp函数现在可用，重新初始化');
+                                        window.Alpine.initTree(contentElement);
+                                    } else {
+                                        console.error('reportConfigApp函数仍然未定义');
+                                    }
+                                }, 200);
+                                return;
+                            }
+                        }
+                        
                         window.Alpine.initTree(contentElement);
                     }
                 }, 100);
@@ -481,7 +513,7 @@ window.generateReportOnce = async function generateReportOnce(reportId) {
         const result = await response.json();
         
         if (result.success) {
-            showToast('报告生成已启动，请稍后查看结果', 'success');
+            showToast('报告生成已启动，系统将自动判断是否使用深度研究模式', 'success');
         } else {
             showToast(result.message || '启动失败', 'error');
         }

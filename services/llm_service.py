@@ -364,52 +364,101 @@ class LLMService:
         return filtered_articles
     
     def generate_simple_report(self, articles: List[Dict], report_config) -> str:
-        """生成简单报告（新闻摘要）"""
+        """生成常规报告（AI分析，无网络搜索）"""
         if not articles:
             return "本期未发现相关新闻。"
         
         try:
-            # 构建文章摘要
-            article_summaries = []
-            for i, article in enumerate(articles[:10], 1):  # 最多10篇文章
-                summary = f"{i}. **{article.get('title', '无标题')}**\n"
-                if article.get('author'):
-                    summary += f"   作者：{article['author']}\n"
-                if article.get('date'):
-                    summary += f"   时间：{article['date']}\n"
-                if article.get('url'):
-                    summary += f"   链接：{article['url']}\n"
-                
-                # 添加内容摘要
-                content = article.get('content', '')
-                if content:
-                    content_preview = content[:200] + "..." if len(content) > 200 else content
-                    summary += f"   摘要：{content_preview}\n"
-                
-                article_summaries.append(summary)
+            # 准备文章内容用于AI分析
+            articles_content = []
+            for i, article in enumerate(articles[:20], 1):  # 最多分析20篇文章
+                title = article.get('title', f'文章{i}')
+                url = article.get('url', '')
+                content = f"""
+【文章{i}】
+标题：{title}
+链接：{url}
+内容：{article.get('content', '')[:1000]}
+时间：{article.get('date', '未知')}
+---"""
+                articles_content.append(content)
             
-            # 生成报告
-            report = f"""# {report_config.name}
+            # 构建AI分析提示
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"""你是一位专业的信息分析师。请根据提供的文章内容，围绕以下目的进行分析：
 
-**生成时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-**数据源：** {report_config.data_sources}
-**关键词：** {report_config.filter_keywords}
-**时间范围：** {report_config.time_range}
+{report_config.purpose}
 
-## 📰 新闻摘要
+请生成一份结构化的分析报告，包含：
+1. **核心要点** - 提炼关键信息
+2. **趋势分析** - 识别发展趋势和变化
+3. **重要事件** - 突出重要动态，每一行之前，都要先说明文章的时间，格式是：mm.dd。
+4. **影响评估** - 分析潜在影响
+5. **总结洞察** - 提供有价值的结论
 
-本期共收集到 {len(articles)} 条相关新闻：
+**重要要求：**
+- 在分析任何观点或事件时，必须严格使用 [来源（仅来源二字）](来源链接) 格式引用来源
+- 每个重要论点都必须有明确的来源引用
+- 不要添加文章中没有的信息
+- 确保所有引用的链接格式正确
 
-{chr(10).join(article_summaries)}
+**引用格式示例：**
+"根据最新报告，数据合规要求日趋严格 [来源](https://example.com/news1)，同时国产替代政策持续推进 [来源](https://example.com/news2)。"
+
+报告应该专业、客观、有深度，并且每个关键信息都有明确的来源追溯。"""
+                },
+                {
+                    "role": "user", 
+                    "content": f"""请基于以下 {len(articles)} 篇文章内容进行分析：
+
+{chr(10).join(articles_content)}
+
+请生成分析报告，并严格在每个重要观点后使用 [来源](来源链接) 格式标注来源。"""
+                }
+            ]
+            
+            # 调用LLM生成报告（使用流式返回）
+            if not self.settings or not self.settings.llm_api_key:
+                raise Exception("LLM配置未设置")
+            
+            logger.info("开始生成常规报告，使用流式返回...")
+            response = self._make_request(messages, temperature=0.7, stream=True)
+            ai_analysis = response.strip()
+            
+            # 构建最终报告
+            report = f"""
+**分析目的：** {report_config.purpose}\n
+**过滤关键词：** {report_config.filter_keywords}\n
+**时间范围：** {report_config.time_range}\n
+**分析文章数：** {len(articles)} 篇\n
 
 ---
-*本报告由智能信息分析平台自动生成*
+
+{ai_analysis}
+
+---
+
+## 📊 数据来源
+
+本报告基于 {len(articles)} 篇相关文章分析生成：
+
 """
+            
+            # 添加文章来源列表
+            for i, article in enumerate(articles[:10], 1):  # 显示前10篇
+                report += f"{i}. [{article.get('title', '无标题')}]({article.get('url', '#')})\n"
+            
+            if len(articles) > 10:
+                report += f"\n*(还有 {len(articles) - 10} 篇文章)*\n"
+            
+            report += "\n---\n*本报告由AI智能分析生成*"
             
             return report
         
         except Exception as e:
-            logger.error(f"生成简单报告失败: {e}")
+            logger.error(f"生成常规报告失败: {e}")
             return f"报告生成失败：{e}"
     
     def generate_deep_research_report(self, articles: List[Dict], report_config) -> str:
@@ -460,10 +509,10 @@ class LLMService:
             # 添加报告头部信息
             header = f"""# {report_config.name} - 深度研究报告
 
-**生成时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-**研究目的：** {report_config.purpose}
-**研究重点：** {report_config.research_focus}
-**分析文章数：** {len(articles)}
+**生成时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n
+**研究目的：** {report_config.purpose}\n
+**研究重点：** {report_config.research_focus}\n
+**分析文章数：** {len(articles)} 篇\n
 
 ---
 
@@ -619,10 +668,10 @@ class LLMService:
             # 添加报告头部信息
             header = f"""# {research_topic} - 深度研究报告
 
-**生成时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-**研究主题：** {research_topic}
-**研究重点：** {research_focus}
-**搜索结果数：** {len(search_results)}
+**生成时间：** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n
+**研究主题：** {research_topic}\n
+**研究重点：** {research_focus}\n
+**搜索结果数：** {len(search_results)} 篇\n
 
 ---
 

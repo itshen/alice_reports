@@ -8,10 +8,17 @@
 import asyncio
 import re
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
 import json
+
+# 使用标准库，避免依赖问题
+try:
+    from dateutil import parser as date_parser
+    DATEUTIL_AVAILABLE = True
+except ImportError:
+    DATEUTIL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +139,7 @@ class CrawlerService:
                     },
                     {
                         "name": "date",
-                        "selector": ".date, .publish-date, .article-date, time, .news-date, .post-date",
+                        "selector": ".date, .publish-date, .article-date, time, .news-date, .post-date, .timestamp, .time, .published, .created, .article-time, .post-time, [datetime], .meta-time, .publish-time",
                         "type": "text"
                     }
                 ]
@@ -164,9 +171,10 @@ class CrawlerService:
                     if result.extracted_content:
                         try:
                             data_list = json.loads(result.extracted_content)
-                            if data_list and len(data_list) > 0:
+                            if data_list and isinstance(data_list, list) and len(data_list) > 0:
                                 extracted_data = data_list[0]  # 取第一个匹配的结果
-                        except json.JSONDecodeError:
+                        except (json.JSONDecodeError, TypeError, IndexError) as e:
+                            logger.debug(f"解析提取内容失败: {e}")
                             pass
                     
                     # 清理和优化内容
@@ -178,7 +186,7 @@ class CrawlerService:
                         # 清理已提取的内容
                         content = self._clean_article_content(content)
                     
-                    title = extracted_data.get('title', '') or result.metadata.get('title', '')
+                    title = extracted_data.get('title', '') or (result.metadata.get('title', '') if result.metadata else '')
                     
                     logger.info(f"成功爬取文章: {title[:50]}...")
                     return {
@@ -343,9 +351,205 @@ class CrawlerService:
         
         return article_content
     
+    def _parse_publish_date(self, date_str, markdown_content="", title=""):
+        """解析文章发布日期"""
+        if not date_str or not date_str.strip():
+            # 如果没有明确的日期，尝试从其他信息中提取
+            date_str = self._extract_date_from_content(markdown_content + " " + title)
+        
+        if not date_str or not date_str.strip():
+            return None
+        
+        try:
+            # 清理日期字符串
+            date_str = date_str.strip()
+            
+            # 常见的中文日期格式（优先匹配带时间的格式）
+            chinese_patterns = [
+                r'(\d{4})年(\d{1,2})月(\d{1,2})日[\s]*(\d{1,2}):(\d{2})',  # 2025年9月11日 08:02
+                r'(\d{4})年(\d{1,2})月(\d{1,2})日',  # 2025年9月11日
+                r'(\d{1,2})月(\d{1,2})日[\s]*(\d{1,2}):(\d{2})',  # 9月11日 08:02
+                r'(\d{1,2})月(\d{1,2})日',  # 9月11日
+                r'今天[\s]*(\d{1,2}):(\d{2})',  # 今天 08:02
+                r'昨天[\s]*(\d{1,2}):(\d{2})',  # 昨天 08:02
+                r'前天[\s]*(\d{1,2}):(\d{2})',  # 前天 08:02
+                r'今天',
+                r'昨天',
+                r'前天',
+                r'(\d+)小时前',
+                r'(\d+)分钟前',
+                r'刚刚'
+            ]
+            
+            # 处理中文日期
+            for pattern in chinese_patterns:
+                match = re.search(pattern, date_str)
+                if match:
+                    return self._parse_chinese_date(match, pattern, date_str)
+            
+            # 尝试处理标准格式（保留空格，因为需要分离日期和时间）
+            # 先处理带时间的格式（包含空格）
+            datetime_match = re.search(r'(\d{4}[-/]\d{1,2}[-/]\d{1,2})[\s]+(\d{1,2}:\d{2})', date_str)
+            if datetime_match:
+                date_part, time_part = datetime_match.groups()
+                try:
+                    # 解析日期部分
+                    if '-' in date_part:
+                        year, month, day = map(int, date_part.split('-'))
+                    else:
+                        year, month, day = map(int, date_part.split('/'))
+                    
+                    # 解析时间部分
+                    hour, minute = map(int, time_part.split(':'))
+                    return datetime(year, month, day, hour, minute, 0)
+                except ValueError:
+                    pass
+            
+            # 处理不带时间的标准格式
+            clean_date = re.sub(r'[^\d\-/]', '', date_str)
+            
+            if re.match(r'\d{4}-\d{1,2}-\d{1,2}$', clean_date):
+                # 标准格式 YYYY-MM-DD
+                parts = clean_date.split('-')
+                year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+                return datetime(year, month, day, 12, 0, 0)
+            elif re.match(r'\d{4}/\d{1,2}/\d{1,2}$', clean_date):
+                # 格式 YYYY/MM/DD
+                parts = clean_date.split('/')
+                year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+                return datetime(year, month, day, 12, 0, 0)
+            
+            # 使用dateutil解析其他标准格式（如果可用）
+            if DATEUTIL_AVAILABLE:
+                try:
+                    parsed_date = date_parser.parse(date_str, fuzzy=True)
+                    
+                    # 如果解析出的日期是未来日期，可能有误，使用当前时间
+                    if parsed_date > datetime.now():
+                        return datetime.now()
+                    
+                    return parsed_date
+                except:
+                    pass
+            
+            # 使用标准库解析常见英文格式
+            english_formats = [
+                '%b %d, %Y',      # Sep 11, 2025
+                '%B %d, %Y',      # September 11, 2025
+                '%Y-%m-%d %H:%M:%S',  # 2025-09-11 15:30:00
+                '%Y-%m-%d %H:%M',     # 2025-09-11 15:30
+                '%m/%d/%Y',       # 09/11/2025
+                '%d/%m/%Y',       # 11/09/2025
+            ]
+            
+            for fmt in english_formats:
+                try:
+                    parsed_date = datetime.strptime(date_str, fmt)
+                    if parsed_date > datetime.now():
+                        return datetime.now()
+                    return parsed_date
+                except ValueError:
+                    continue
+            
+            # 如果都无法解析，返回None
+            return None
+            
+        except Exception as e:
+            logger.debug(f"日期解析失败: {date_str}, 错误: {e}")
+            return None
+    
+    def _extract_date_from_content(self, content):
+        """从内容中提取日期信息"""
+        if not content:
+            return None
+        
+        # 常见的日期模式（包含时间）
+        date_patterns = [
+            r'(\d{4}年\d{1,2}月\d{1,2}日[\s]*\d{1,2}:\d{2})',  # 2025年9月11日 08:02
+            r'(\d{4}年\d{1,2}月\d{1,2}日)',  # 2025年9月11日
+            r'(\d{4}-\d{1,2}-\d{1,2}[\s]+\d{1,2}:\d{2}:\d{2})',  # 2025-09-11 08:02:30
+            r'(\d{4}-\d{1,2}-\d{1,2}[\s]+\d{1,2}:\d{2})',  # 2025-09-11 08:02
+            r'(\d{4}-\d{1,2}-\d{1,2})',  # 2025-09-11
+            r'(\d{1,2}月\d{1,2}日[\s]*\d{1,2}:\d{2})',  # 9月11日 08:02
+            r'(\d{1,2}月\d{1,2}日)',  # 9月11日
+            r'(\d+小时前)',
+            r'(\d+分钟前)',
+            r'(今天|昨天|前天)',
+            r'(刚刚)',
+            r'发布于[\s]*(\d{4}-\d{1,2}-\d{1,2}[\s]*\d{1,2}:\d{2})',
+            r'时间[:：][\s]*(\d{4}-\d{1,2}-\d{1,2}[\s]*\d{1,2}:\d{2})',
+            r'(\d{4}/\d{1,2}/\d{1,2}[\s]+\d{1,2}:\d{2})',  # 2025/09/11 08:02
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, content)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def _parse_chinese_date(self, match, pattern, original_str):
+        """解析中文日期格式"""
+        try:
+            now = datetime.now()
+            groups = match.groups()
+            
+            # 带时间的今天/昨天/前天
+            if '今天' in original_str and len(groups) >= 2:
+                hour, minute = int(groups[-2]), int(groups[-1])
+                return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            elif '昨天' in original_str and len(groups) >= 2:
+                hour, minute = int(groups[-2]), int(groups[-1])
+                return (now - timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+            elif '前天' in original_str and len(groups) >= 2:
+                hour, minute = int(groups[-2]), int(groups[-1])
+                return (now - timedelta(days=2)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+            # 不带时间的今天/昨天/前天
+            elif '今天' in original_str:
+                return now.replace(hour=12, minute=0, second=0, microsecond=0)
+            elif '昨天' in original_str:
+                return (now - timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+            elif '前天' in original_str:
+                return (now - timedelta(days=2)).replace(hour=12, minute=0, second=0, microsecond=0)
+            elif '小时前' in original_str:
+                hours = int(match.group(1))
+                return now - timedelta(hours=hours)
+            elif '分钟前' in original_str:
+                minutes = int(match.group(1))
+                return now - timedelta(minutes=minutes)
+            elif '刚刚' in original_str:
+                return now - timedelta(minutes=5)
+            # 带时间的完整日期：2025年9月11日 08:02
+            elif '年' in pattern and '月' in pattern and '日' in pattern and len(groups) >= 5:
+                year, month, day, hour, minute = int(groups[0]), int(groups[1]), int(groups[2]), int(groups[3]), int(groups[4])
+                return datetime(year, month, day, hour, minute, 0)
+            # 带时间的月日：9月11日 08:02
+            elif '月' in pattern and '日' in pattern and len(groups) >= 4:
+                month, day, hour, minute = int(groups[0]), int(groups[1]), int(groups[2]), int(groups[3])
+                return datetime(now.year, month, day, hour, minute, 0)
+            # 不带时间的完整日期：2025年9月11日
+            elif '年' in pattern and '月' in pattern and '日' in pattern:
+                year = int(match.group(1))
+                month = int(match.group(2))
+                day = int(match.group(3))
+                return datetime(year, month, day, 12, 0, 0)
+            # 不带时间的月日：9月11日
+            elif '月' in pattern and '日' in pattern:
+                month = int(match.group(1))
+                day = int(match.group(2))
+                return datetime(now.year, month, day, 12, 0, 0)
+            
+        except Exception as e:
+            logger.debug(f"中文日期解析失败: {original_str}, 错误: {e}")
+        
+        return None
+    
     async def run_crawler_task(self, crawler_config):
         """执行爬虫任务"""
         try:
+            # 导入数据库相关模块（避免循环导入）
+            from models import db
+            
             logger.info(f"开始执行爬虫任务: {crawler_config.name}")
             
             # 1. 从列表页提取URL
@@ -356,27 +560,239 @@ class CrawlerService:
             
             if not urls:
                 logger.warning(f"爬虫 {crawler_config.name} 未找到任何URL")
-                return []
+                
+                # 即使没有找到URL也要更新最后运行时间
+                try:
+                    crawler_config.last_run = datetime.utcnow()
+                    db.session.commit()
+                    logger.info(f"✅ 已更新爬虫 {crawler_config.name} 的最后运行时间（未找到URL）")
+                except Exception as e:
+                    logger.error(f"更新last_run时间失败: {e}")
+                    db.session.rollback()
+                
+                return {
+                    'success': True,
+                    'saved_count': 0,
+                    'failed_count': 0,
+                    'total_processed': 0
+                }
             
             logger.info(f"爬虫 {crawler_config.name} 找到 {len(urls)} 个URL")
             
-            # 2. 批量抓取文章内容
-            results = []
-            for i, url in enumerate(urls[:20]):  # 限制每次最多抓取20篇文章
-                logger.info(f"正在爬取第 {i+1}/{min(len(urls), 20)} 篇文章")
-                result = await self.crawl_article_content(url)
-                results.append(result)
+            # 2. 过滤已存在的URL，避免重复爬取
+            new_urls = await self._filter_new_urls(urls, crawler_config.id)
+            
+            if not new_urls:
+                logger.info(f"爬虫 {crawler_config.name} 所有URL都已存在，跳过爬取")
                 
-                # 添加延迟避免被封
-                await asyncio.sleep(1)
+                # 即使没有新URL也要更新最后运行时间
+                try:
+                    crawler_config.last_run = datetime.utcnow()
+                    db.session.commit()
+                    logger.info(f"✅ 已更新爬虫 {crawler_config.name} 的最后运行时间（无新URL）")
+                except Exception as e:
+                    logger.error(f"更新last_run时间失败: {e}")
+                    db.session.rollback()
+                
+                return {
+                    'success': True,
+                    'saved_count': 0,
+                    'failed_count': 0,
+                    'total_processed': 0
+                }
             
-            logger.info(f"爬虫 {crawler_config.name} 完成，成功抓取 {len([r for r in results if r['success']])} 篇文章")
+            logger.info(f"爬虫 {crawler_config.name} 过滤后需要爬取 {len(new_urls)} 个新URL")
             
-            return results
+            # 3. 逐个抓取文章内容并立即保存（带重试机制）
+            saved_count = 0
+            failed_count = 0
+            base_delay = 1.0  # 基础延迟
+            
+            for i, url in enumerate(new_urls[:20]):  # 限制每次最多抓取20篇文章
+                logger.info(f"正在爬取第 {i+1}/{min(len(new_urls), 20)} 篇文章")
+                
+                # 带重试的抓取
+                result = await self._crawl_with_retry(url, max_retries=3)
+                
+                # 立即保存到数据库
+                save_success = await self._save_single_result(result, crawler_config)
+                if save_success:
+                    saved_count += 1
+                    # 成功时使用基础延迟
+                    delay = base_delay
+                else:
+                    failed_count += 1
+                    # 失败时增加延迟
+                    delay = base_delay * 2
+                
+                # 动态延迟避免被封
+                logger.debug(f"等待 {delay:.1f} 秒后继续...")
+                await asyncio.sleep(delay)
+            
+            logger.info(f"爬虫 {crawler_config.name} 完成，成功保存 {saved_count} 篇文章，失败 {failed_count} 篇")
+            
+            # 更新爬虫最后运行时间
+            try:
+                crawler_config.last_run = datetime.utcnow()
+                db.session.commit()
+                logger.info(f"✅ 已更新爬虫 {crawler_config.name} 的最后运行时间")
+            except Exception as e:
+                logger.error(f"更新last_run时间失败: {e}")
+                db.session.rollback()
+            
+            # 返回统计信息而不是具体结果
+            return {
+                'success': True,
+                'saved_count': saved_count,
+                'failed_count': failed_count,
+                'total_processed': saved_count + failed_count
+            }
         
         except Exception as e:
             logger.error(f"执行爬虫任务失败 {crawler_config.name}: {e}")
+            
+            # 即使失败也要更新最后运行时间
+            try:
+                crawler_config.last_run = datetime.utcnow()
+                db.session.commit()
+                logger.info(f"✅ 已更新爬虫 {crawler_config.name} 的最后运行时间（任务失败）")
+            except Exception as update_error:
+                logger.error(f"更新last_run时间失败: {update_error}")
+                db.session.rollback()
+            
             return []
+    
+    async def _crawl_with_retry(self, url, max_retries=3):
+        """带重试机制的文章抓取"""
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # 重试时增加延迟（指数退避）
+                    retry_delay = (2 ** attempt) * 1.0  # 1秒, 2秒, 4秒
+                    logger.info(f"第 {attempt + 1} 次重试 {url}，等待 {retry_delay:.1f} 秒...")
+                    await asyncio.sleep(retry_delay)
+                
+                result = await self.crawl_article_content(url)
+                
+                # 如果成功，直接返回
+                if result['success']:
+                    if attempt > 0:
+                        logger.info(f"✅ 重试成功: {url}")
+                    return result
+                else:
+                    # 如果失败，记录错误并继续重试
+                    last_error = result.get('error', 'Unknown error')
+                    logger.warning(f"第 {attempt + 1} 次尝试失败: {last_error}")
+                    
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"第 {attempt + 1} 次尝试异常: {e}")
+        
+        # 所有重试都失败了
+        logger.error(f"❌ {max_retries} 次重试后仍然失败: {url}, 最后错误: {last_error}")
+        return {
+            'success': False,
+            'url': url,
+            'error': f"重试 {max_retries} 次后失败: {last_error}"
+        }
+    
+    async def _save_single_result(self, result, crawler_config):
+        """立即保存单条爬取结果到数据库"""
+        try:
+            # 导入模型（避免循环导入）
+            from models import CrawlRecord, db
+            from app import app
+            from datetime import datetime
+            
+            with app.app_context():
+                # 再次检查URL是否已存在（防止并发问题）
+                existing = CrawlRecord.query.filter_by(
+                    url=result['url'], 
+                    status='success'
+                ).first()
+                
+                if existing:
+                    logger.info(f"URL已存在，跳过保存: {result['url']}")
+                    return True  # 算作成功，因为数据已存在
+                
+                if result['success']:
+                    # 解析发布日期
+                    publish_date = self._parse_publish_date(
+                        result.get('date', ''),
+                        result.get('markdown', ''),
+                        result.get('title', '')
+                    )
+                    
+                    record = CrawlRecord(
+                        crawler_config_id=crawler_config.id,
+                        url=result['url'],
+                        title=result.get('title', ''),
+                        content=result.get('content', ''),
+                        author=result.get('author', ''),
+                        publish_date=publish_date,  # 使用解析出的发布日期
+                        crawled_at=datetime.utcnow(),  # 爬取时间
+                        status='success'
+                    )
+                    
+                    date_info = publish_date.strftime('%Y-%m-%d %H:%M') if publish_date else '未知'
+                    logger.info(f"✅ 保存成功记录 [发布:{date_info}]: {result.get('title', result['url'])[:50]}...")
+                else:
+                    record = CrawlRecord(
+                        crawler_config_id=crawler_config.id,
+                        url=result['url'],
+                        crawled_at=datetime.utcnow(),
+                        status='failed',
+                        error_message=result.get('error', '')
+                    )
+                    logger.info(f"❌ 保存失败记录: {result['url'][:60]}... - {result.get('error', 'Unknown error')}")
+                
+                db.session.add(record)
+                
+                # 立即提交这条记录
+                db.session.commit()
+                logger.debug(f"💾 单条记录已提交到数据库")
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"保存单条记录失败: {e}, URL: {result.get('url', 'Unknown')}")
+            # 回滚这次操作
+            try:
+                from app import app
+                with app.app_context():
+                    db.session.rollback()
+            except:
+                pass
+            return False
+    
+    async def _filter_new_urls(self, urls, crawler_config_id):
+        """过滤出新的URL，避免重复爬取"""
+        try:
+            # 导入CrawlRecord模型（避免循环导入）
+            from models import CrawlRecord
+            
+            new_urls = []
+            for url in urls:
+                # 检查URL是否已存在于数据库中
+                existing = CrawlRecord.query.filter_by(
+                    url=url,
+                    status='success'
+                ).first()
+                
+                if not existing:
+                    new_urls.append(url)
+                else:
+                    logger.debug(f"URL已存在，跳过: {url}")
+            
+            logger.info(f"URL过滤完成: 总共 {len(urls)} 个，新增 {len(new_urls)} 个，已存在 {len(urls) - len(new_urls)} 个")
+            return new_urls
+            
+        except Exception as e:
+            logger.error(f"过滤URL失败: {e}")
+            # 如果过滤失败，返回原始URL列表，确保爬虫能继续工作
+            return urls
     
     def generate_regex_with_ai(self, page_content, sample_titles):
         """使用AI生成正则表达式（占位符实现）"""

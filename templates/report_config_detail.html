@@ -138,8 +138,10 @@
                                             class="form-select"
                                         >
                                             <option value="24h">最近24小时</option>
+                                            <option value="2d">最近2天</option>
                                             <option value="3d">最近3天</option>
                                             <option value="7d">最近7天</option>
+                                            <option value="14d">最近14天</option>
                                             <option value="30d">最近30天</option>
                                         </select>
                                     </div>
@@ -156,14 +158,15 @@
                             
                             <div class="space-y-4">
                                 <div>
-                                    <label class="flex items-center">
+                                    <label class="flex items-center opacity-50 cursor-not-allowed">
                                         <input 
                                             type="checkbox" 
                                             x-model="config.enable_deep_research"
-                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                            class="form-checkbox h-4 w-4 text-gray-400"
+                                            disabled
                                         >
-                                        <span class="ml-2 text-sm font-medium text-gray-700">开启AI深度研究</span>
-                                        <span class="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">通用框架</span>
+                                        <span class="ml-2 text-sm font-medium text-gray-400">开启AI深度研究 (已禁用)</span>
+                                        <span class="ml-2 px-2 py-1 text-xs bg-gray-100 text-gray-500 rounded-full">功能关闭</span>
                                     </label>
                                     <div class="text-xs text-gray-500 mt-2 ml-6 space-y-1">
                                         <p>🔬 <strong>智能分析</strong>：AI自动识别研究领域，应用对应分析框架</p>
@@ -172,20 +175,19 @@
                                     </div>
                                 </div>
 
-                                <div x-show="config.enable_deep_research" x-transition class="space-y-4">
+                                <div class="space-y-4 opacity-50">
                                     <div>
-                                        <label for="research_focus" class="block text-sm font-medium text-gray-700 mb-2">
-                                            研究重点和分析方向 <span class="text-red-500">*</span>
+                                        <label for="research_focus" class="block text-sm font-medium text-gray-400 mb-2">
+                                            研究重点和分析方向 (已禁用)
                                         </label>
                                         <textarea 
                                             id="research_focus" 
                                             name="research_focus" 
                                             x-model="config.research_focus"
-                                            :required="config.enable_deep_research"
                                             rows="4"
-                                            class="form-textarea"
-                                            :class="config.enable_deep_research ? 'ring-2 ring-blue-500 border-blue-500' : ''"
-                                            placeholder="请描述您希望AI重点关注的分析维度，系统将自动应用通用分析框架：&#10;&#10;📋 通用分析框架：&#10;• 现状分析 - 领域概况、主要参与者、核心要素&#10;• 深度解析 - 技术/方法细节、关键指标、对比分析&#10;• 趋势洞察 - 发展方向、机会挑战、影响因素&#10;• 价值评估 - 实际应用、商业价值、社会意义&#10;• 策略建议 - 可执行建议、风险提示、发展建议&#10;&#10;💡 示例：重点关注技术创新突破点、市场竞争格局变化、用户接受度反馈、商业化应用前景..."
+                                            class="form-textarea text-gray-400 bg-gray-100"
+                                            disabled
+                                            placeholder="深度研究功能已禁用"
                                         ></textarea>
                                     </div>
                                     
@@ -263,6 +265,149 @@
                             </div>
                         </div>
 
+                        <!-- 定时推送配置 -->
+                        <div class="border-t border-gray-200 pt-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">⏰ 定时推送配置</h3>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            x-model="config.enable_scheduled_push"
+                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                        >
+                                        <span class="ml-2 text-sm font-medium text-gray-700">启用定时推送</span>
+                                        <span class="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded-full">+8时区</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mt-1 ml-6">开启后将按照设定的时间自动生成并推送报告</p>
+                                </div>
+
+                                <div x-show="config.enable_scheduled_push" class="space-y-4 ml-6">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="schedule_time" class="block text-sm font-medium text-gray-700 mb-2">
+                                                推送时间
+                                            </label>
+                                            <input 
+                                                type="time" 
+                                                id="schedule_time" 
+                                                name="schedule_time" 
+                                                x-model="config.schedule_time"
+                                                class="form-input"
+                                            >
+                                            <p class="text-xs text-gray-500 mt-1">北京时间（+8时区）</p>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                推送日期
+                                            </label>
+                                            <div class="space-y-2">
+                                                <div class="flex flex-wrap gap-2">
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="1"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周一</span>
+                                                    </label>
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="2"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周二</span>
+                                                    </label>
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="3"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周三</span>
+                                                    </label>
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="4"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周四</span>
+                                                    </label>
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="5"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周五</span>
+                                                    </label>
+                                                </div>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="6"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周六</span>
+                                                    </label>
+                                                    <label class="flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            value="7"
+                                                            x-model="config.schedule_weekdays_array"
+                                                            class="form-checkbox h-4 w-4 text-blue-600"
+                                                        >
+                                                        <span class="ml-1 text-sm text-gray-700">周日</span>
+                                                    </label>
+                                                </div>
+                                                <div class="flex gap-2 mt-2">
+                                                    <button 
+                                                        type="button"
+                                                        @click="selectWorkdays()"
+                                                        class="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                                                    >
+                                                        工作日
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        @click="selectWeekends()"
+                                                        class="text-xs px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200"
+                                                    >
+                                                        周末
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        @click="selectAllDays()"
+                                                        class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                                    >
+                                                        每天
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-blue-50 p-3 rounded-lg">
+                                        <p class="text-sm text-blue-800">
+                                            <span class="font-medium">💡 提示：</span>
+                                            定时推送将在指定时间自动生成报告并发送到配置的Webhook。请确保已正确配置Webhook URL。
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- 操作按钮 -->
                         <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
                             <a 
@@ -313,9 +458,8 @@
                                         x-text="record.status === 'success' ? '成功' : record.status === 'failed' ? '失败' : '生成中'"
                                     ></span>
                                     <button 
-                                        onclick="alert('查看详情功能开发中')"
-                                        class="text-gray-400 text-sm cursor-not-allowed"
-                                        disabled
+                                        @click="viewReportDetail(record)"
+                                        class="text-blue-600 hover:text-blue-900 text-sm transition-colors"
                                     >
                                         查看详情
                                     </button>
@@ -326,53 +470,76 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- 报告内容查看模态框 (暂时禁用) -->
-    <div x-show="false" x-transition class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <!-- 报告内容查看模态框 -->
+        <div x-show="showReportModal" x-transition class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
             <div class="flex justify-between items-center p-6 border-b border-gray-200">
-                <h3 class="text-lg font-medium text-gray-900">报告详情</h3>
-                <button onclick="console.log('关闭模态框')" class="text-gray-400 hover:text-gray-600">
+                <h3 class="text-lg font-medium text-gray-900" x-text="selectedReport ? selectedReport.title : '报告详情'"></h3>
+                <button @click="closeReportModal()" class="text-gray-400 hover:text-gray-600">
                     <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                 </button>
             </div>
-            <div class="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-                <div class="prose max-w-none">暂无内容</div>
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+                 <!-- 操作按钮 -->
+                 <div class="mb-4 flex justify-end items-center border-b border-gray-200 pb-4">
+                     <button 
+                         @click="copyToClipboard()"
+                         class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                     >
+                         📋 复制Markdown内容
+                     </button>
+                 </div>
+
+                 <!-- Markdown内容显示 -->
+                 <div class="bg-white">
+                     <pre class="bg-gray-50 p-4 rounded border text-sm overflow-auto whitespace-pre-wrap font-mono leading-relaxed" 
+                          x-text="selectedReport ? selectedReport.content : '暂无内容'"></pre>
+                 </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-window.reportConfigApp = function reportConfigApp() {
+// 立即在全局作用域定义函数
+window.reportConfigApp = function() {
     return {
         activeTab: 'config',
         config: {
-            id: {{ report.id if report else 'null' }},
-            name: '{{ report.name if report else "" }}',
+            id: {% if report and report.id %}{{ report.id }}{% else %}null{% endif %},
+            name: {{ (report.name|tojson) if report and report.name else '""' }},
             data_sources: {{ (report.data_sources.split(',') | map('int') | list) if report and report.data_sources else '[]' }},
-            filter_keywords: '{{ report.filter_keywords if report else "" }}',
-            time_range: '{{ report.time_range if report else "24h" }}',
-            purpose: '{{ report.purpose if report else "" }}',
-            enable_deep_research: {{ 'true' if report and report.enable_deep_research else 'false' }},
-            research_focus: '{{ report.research_focus if report else "" }}',
-            notification_type: '{{ report.notification_type if report else "wechat" }}',
-            webhook_url: '{{ report.webhook_url if report else "" }}'
+            filter_keywords: {{ (report.filter_keywords|tojson) if report and report.filter_keywords else '""' }},
+            time_range: {{ (report.time_range|tojson) if report and report.time_range else '"24h"' }},
+            purpose: {{ (report.purpose|tojson) if report and report.purpose else '""' }},
+            enable_deep_research: false, // 深度研究功能已禁用
+            research_focus: {{ (report.research_focus|tojson) if report and report.research_focus else '""' }},
+            notification_type: {{ (report.notification_type|tojson) if report and report.notification_type else '"wechat"' }},
+            webhook_url: {{ (report.webhook_url|tojson) if report and report.webhook_url else '""' }},
+            // 定时推送配置
+            enable_scheduled_push: {{ (report.enable_scheduled_push|tojson) if report and report.enable_scheduled_push is not none else 'false' }},
+            schedule_weekdays: {{ (report.schedule_weekdays|tojson) if report and report.schedule_weekdays else '"1,2,3,4,5"' }},
+            schedule_time: {{ (report.schedule_time|tojson) if report and report.schedule_time else '"09:00"' }},
+            timezone: {{ (report.timezone|tojson) if report and report.timezone else '"Asia/Shanghai"' }},
+            // 用于界面的工作日数组
+            schedule_weekdays_array: {{ (report.schedule_weekdays.split(',')|tojson) if report and report.schedule_weekdays else '["1","2","3","4","5"]' }}
         },
         historyRecords: [],
         loading: false,
-        testingWebhook: false,
-        showReportModal: false,
-        selectedReport: null,
+         testingWebhook: false,
+         showReportModal: false,
+         selectedReport: null,
         
         init() {
             // 如果是编辑模式，加载历史记录
             if (this.config.id) {
                 this.loadHistoryRecords();
             }
+            
+            console.log('报告配置组件初始化完成');
         },
         
         async loadHistoryRecords() {
@@ -385,6 +552,38 @@ window.reportConfigApp = function reportConfigApp() {
                 }
             } catch (error) {
                 console.error('加载历史记录失败:', error);
+            }
+        },
+        
+        viewReportDetail(report) {
+            this.selectedReport = report;
+            this.showReportModal = true;
+        },
+        
+        closeReportModal() {
+            this.showReportModal = false;
+            this.selectedReport = null;
+        },
+        
+        async copyToClipboard() {
+            if (!this.selectedReport || !this.selectedReport.content) {
+                showToast('暂无内容可复制', 'warning');
+                return;
+            }
+            
+            try {
+                await navigator.clipboard.writeText(this.selectedReport.content);
+                showToast('内容已复制到剪贴板', 'success');
+            } catch (error) {
+                console.error('复制失败:', error);
+                // 降级方案
+                const textArea = document.createElement('textarea');
+                textArea.value = this.selectedReport.content;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showToast('内容已复制到剪贴板', 'success');
             }
         },
         
@@ -423,15 +622,51 @@ window.reportConfigApp = function reportConfigApp() {
             }
         },
         
+        // 工作日选择方法
+        selectWorkdays() {
+            this.config.schedule_weekdays_array = ['1', '2', '3', '4', '5'];
+            this.updateScheduleWeekdays();
+        },
+        
+        selectWeekends() {
+            this.config.schedule_weekdays_array = ['6', '7'];
+            this.updateScheduleWeekdays();
+        },
+        
+        selectAllDays() {
+            this.config.schedule_weekdays_array = ['1', '2', '3', '4', '5', '6', '7'];
+            this.updateScheduleWeekdays();
+        },
+        
+        updateScheduleWeekdays() {
+            this.config.schedule_weekdays = this.config.schedule_weekdays_array.join(',');
+        },
+
         async saveReport() {
             if (this.config.data_sources.length === 0) {
                 showToast('请至少选择一个数据源', 'warning');
                 return;
             }
             
-            if (this.config.enable_deep_research && !this.config.research_focus.trim()) {
-                showToast('开启深度研究时，请填写报告的侧重点', 'warning');
-                return;
+            // 验证定时推送配置
+            if (this.config.enable_scheduled_push) {
+                if (!this.config.schedule_time) {
+                    showToast('请设置推送时间', 'warning');
+                    return;
+                }
+                
+                if (!this.config.schedule_weekdays_array || this.config.schedule_weekdays_array.length === 0) {
+                    showToast('请选择推送日期', 'warning');
+                    return;
+                }
+                
+                if (!this.config.webhook_url) {
+                    showToast('启用定时推送需要配置Webhook URL', 'warning');
+                    return;
+                }
+                
+                // 更新schedule_weekdays字段
+                this.updateScheduleWeekdays();
             }
             
             this.loading = true;
@@ -469,5 +704,6 @@ window.reportConfigApp = function reportConfigApp() {
         }
     }
 }
+
 </script>
 {% endblock %}

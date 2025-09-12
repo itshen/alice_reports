@@ -30,6 +30,9 @@ class DeepResearchService:
         try:
             logger.info(f"开始深度研究: {report_config.name}")
             
+            # 0. 更新LLM设置
+            self.llm_service.update_settings(settings)
+            
             # 1. 从数据库获取最近爬到的内容
             initial_articles = await self._build_initial_knowledge_base(report_config)
             
@@ -39,47 +42,34 @@ class DeepResearchService:
                     'message': '初始数据获取失败，未从数据库中找到相关数据'
                 }
             
-            # 2. 根据用户配置的关键词过滤文章
+            # 2. 使用配置关键词进行基础过滤（如果有的话）
             if report_config.filter_keywords:
                 filtered_articles = self.llm_service.filter_articles_by_keywords(
                     initial_articles, report_config.filter_keywords
                 )
-                logger.info(f"关键词过滤: {len(initial_articles)} -> {len(filtered_articles)} 篇文章")
+                logger.info(f"配置关键词过滤: {len(initial_articles)} -> {len(filtered_articles)} 篇文章")
                 knowledge_base = filtered_articles
-                
-                if not knowledge_base:
-                    return {
-                        'success': False,
-                        'message': f"根据关键词'{report_config.filter_keywords}'过滤后未找到相关文章"
-                    }
             else:
                 knowledge_base = initial_articles
             
-            # 3. AI初步分析现有内容，制定研究计划
-            initial_analysis = await self._ai_initial_analysis(knowledge_base, report_config)
-            logger.info(f"AI初步分析完成: {initial_analysis.get('summary', '未获得分析结果')}")
+            if not knowledge_base:
+                return {
+                    'success': False,
+                    'message': '过滤后未找到相关文章'
+                }
             
-            # 4. 基于AI分析进行迭代研究
+            # 3. 开始迭代研究 - AI判断现有资料是否足够写报告
             iteration_count = 0
             research_log = []
-            
-            # 在研究日志中记录初步分析
-            research_log.append({
-                'iteration': 0,
-                'action': 'initial_analysis',
-                'details': f"知识现状: {initial_analysis.get('summary', '')}\n知识空白: {initial_analysis.get('gaps', '')}\n研究方向: {'; '.join(initial_analysis.get('directions', []))}",
-                'timestamp': datetime.now().isoformat()
-            })
             
             while iteration_count < self.max_iterations:
                 iteration_count += 1
                 logger.info(f"开始第 {iteration_count} 轮研究迭代")
                 
-                # 发送knowledge_base、user_prompt和初步分析给AI
-                ai_response = await self._send_guided_research_prompt(
+                # AI分析当前知识库，判断是否能写报告
+                ai_response = await self._send_research_prompt(
                     knowledge_base, 
-                    report_config, 
-                    initial_analysis,
+                    report_config,
                     iteration_count
                 )
                 
@@ -232,7 +222,10 @@ class DeepResearchService:
             CrawlRecord.crawler_config_id == crawler_id,
             CrawlRecord.status == 'success',
             CrawlRecord.crawled_at >= cutoff_time
-        ).order_by(CrawlRecord.crawled_at.desc()).limit(10).all()
+        ).order_by(
+            CrawlRecord.publish_date.desc().nulls_last(),
+            CrawlRecord.crawled_at.desc()
+        ).limit(10).all()
         
         if records:
             logger.info(f"从历史记录获取 {len(records)} 篇文章")
@@ -265,7 +258,10 @@ class DeepResearchService:
                 CrawlRecord.crawler_config_id == deep_research_crawler.id,
                 CrawlRecord.status == 'success',
                 CrawlRecord.crawled_at >= cutoff_time
-            ).order_by(CrawlRecord.crawled_at.desc()).limit(20).all()
+            ).order_by(
+                CrawlRecord.publish_date.desc().nulls_last(),
+                CrawlRecord.crawled_at.desc()
+            ).limit(20).all()
             
             if search_records:
                 logger.info(f"从深度研究历史数据获取 {len(search_records)} 篇文章")
@@ -300,21 +296,33 @@ class DeepResearchService:
         messages = [
             {
                 "role": "system",
-                "content": """你是一个专业的研究助手。你的任务是基于现有知识库进行深度研究。
+                "content": f"""你是一位专业的新闻分析师，需要判断现有资料是否足够写出一份基于具体现象的深度分析报告。
 
-你需要分析用户的研究需求和现有知识库，然后决定下一步行动：
+**报告目标**: {report_config.purpose}
 
-1. 如果知识库已经足够完整，可以满足研究需求，请返回：
-<finish />
+**判断标准**：
+1. **可以写报告的情况**：
+   - 有具体的新闻事件、公司动态、产品发布等
+   - 有足够的细节和数据支撑深度分析  
+   - 能够基于某个具体现象进行多角度解读
+   - 内容足够写出事件概述、深度分析、影响评估、趋势预测
 
-2. 如果需要更多信息，请返回：
-<keywords_to_search>关键词1,关键词2,关键词3</keywords_to_search>
+2. **需要补充资料的情况**：
+   - 只有泛泛的行业信息，缺少具体案例
+   - 缺少关键的背景信息或最新动态
+   - 无法基于现有内容写出有价值的深度分析
 
-注意：
-- 关键词应该精准、具体，有助于找到相关信息
-- 每次最多提供5个关键词
-- 关键词之间用逗号分隔
-- 只返回XML格式的响应，不要其他解释"""
+**响应格式**：
+- 如果可以开始写报告：<finish />
+- 如果需要搜索补充：<keywords_to_search>关键词1,关键词2,关键词3</keywords_to_search>
+
+**搜索关键词要求**：
+- 具体的公司名、产品名、事件名
+- 最新的新闻动态、发布会、政策变化
+- 避免宽泛词汇，要具体化
+- 每次最多3个关键词，用逗号分隔
+
+记住：报告不是大而全的行业报告，而是基于某个具体现象的深度分析。"""
             },
             {
                 "role": "user",
@@ -324,7 +332,14 @@ class DeepResearchService:
 
 {kb_xml}
 
-请分析现有知识库是否足够完整，决定是否需要搜索更多信息。"""
+请分析现有知识库：
+1. 如果已经有足够的具体新闻内容可以写出详细分析报告，请返回 <finish />
+2. 如果还缺少关键的具体信息、案例、数据，才搜索补充
+
+判断标准：
+- 有具体的新闻事件、公司动态、产品发布等内容 → 可以结束
+- 有足够的细节可以进行深度分析 → 可以结束  
+- 只有泛泛的行业信息，缺少具体案例 → 需要搜索"""
             }
         ]
         
@@ -395,6 +410,11 @@ class DeepResearchService:
                 # 爬取选中的URL并入库
                 for i, url in enumerate(urls_to_crawl[:3]):  # 每个关键词最多爬3个URL
                     try:
+                        # 先检查URL是否已存在于数据库
+                        if await self._url_exists_in_db(url):
+                            logger.info(f"URL已存在于数据库，跳过: {url}")
+                            continue
+                            
                         logger.info(f"正在爬取第 {i+1}/{min(len(urls_to_crawl), 3)} 个URL: {url[:50]}...")
                         result = await self.crawler_service.crawl_article_content(url)
                         if result['success']:
@@ -421,6 +441,16 @@ class DeepResearchService:
             await asyncio.sleep(2)
         
         return new_articles
+    
+    async def _url_exists_in_db(self, url: str) -> bool:
+        """检查URL是否已存在于数据库中"""
+        try:
+            from models import CrawlRecord
+            existing_record = CrawlRecord.query.filter_by(url=url, status='success').first()
+            return existing_record is not None
+        except Exception as e:
+            logger.error(f"检查URL是否存在失败: {e}")
+            return False
     
     async def _save_search_result_to_db(self, crawl_result: Dict, keyword: str):
         """将搜索结果保存到数据库"""
@@ -829,28 +859,43 @@ URL3
         messages = [
             {
                 "role": "system",
-                "content": f"""你是一位专业的研究分析师，擅长各个领域的深度研究。请基于知识库生成高质量研究报告。
+                "content": f"""你是一位专业的新闻分析师，擅长对具体新闻事件进行深度分析。请基于知识库中的具体新闻内容生成详细的分析报告。
 
-🎯 通用分析框架（适配任何研究领域）：
-1. **现状分析** - 领域概况、主要参与者、核心要素
-2. **深度解析** - 技术/方法细节、关键指标、对比分析  
-3. **趋势洞察** - 发展方向、机会挑战、影响因素
-4. **价值评估** - 实际应用、商业价值、社会意义
-5. **策略建议** - 可执行建议、风险提示、发展建议
+🎯 **报告要求**：
+- **聚焦具体事件**：针对知识库中的具体新闻、案例、事件进行分析，不要写泛泛而谈的行业报告
+- **详细内容分析**：深入分析新闻背景、关键信息、影响因素，提供具体的数据和细节
+- **多角度解读**：从技术、商业、市场、用户等多个角度分析事件
+- **实用性强**：提供可操作的洞察和建议
+- **引用来源**：在引用具体信息时，必须添加来源链接，格式为 [来源](URL)
 
-📋 报告质量标准：
-- 结构化专业报告格式
-- 基于事实的客观分析
-- 有深度的洞察和判断
-- 可操作的建议和结论
+📋 **分析框架**：
+1. **事件概述** - 具体发生了什么，关键参与者，时间背景
+2. **深度分析** - 事件背后的原因、技术细节、商业逻辑
+3. **影响评估** - 对行业、用户、竞争对手的具体影响
+4. **趋势预测** - 基于此事件可能的后续发展
+5. **实用建议** - 针对不同角色的具体建议
 
-🔍 当前研究任务：
-- 研究目的：{report_config.purpose}
-- 研究重点：{report_config.research_focus}"""
+⚠️ **避免**：
+- 不要写成行业概述或通用分析
+- 不要只列标题和大纲
+- 不要泛泛而谈，要有具体内容
+- 每个部分都要有详细的分析内容
+
+🔍 当前分析任务：
+- 分析目的：{report_config.purpose}
+- 分析重点：{report_config.research_focus}"""
             },
             {
                 "role": "user",
-                "content": f"""请基于以下完整知识库生成深度研究报告：
+                "content": f"""请基于以下知识库中的具体新闻内容，生成详细的分析报告。
+
+要求：
+1. 重点分析知识库中的具体新闻事件，不要写泛泛的行业报告
+2. 每个章节都要有详细的内容，不要只是标题
+3. 提供具体的数据、案例、分析
+4. 针对具体事件进行深度解读
+5. **重要**：引用具体信息时，必须添加来源链接，格式为 [来源](URL)
+6. 每个重要观点都要有对应的来源链接支撑
 
 <user_prompt>
 <report_purpose>{report_config.purpose}</report_purpose>
@@ -859,7 +904,7 @@ URL3
 
 {kb_xml}
 
-请生成专业的深度研究报告。"""
+请生成详细的新闻分析报告，每个部分都要有具体内容。"""
             }
         ]
         

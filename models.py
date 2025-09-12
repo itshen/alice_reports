@@ -71,6 +71,13 @@ class ReportConfig(db.Model):
     notification_type = db.Column(db.String(20), default='wechat')  # wechat, jinshan
     webhook_url = db.Column(db.String(500))
     is_active = db.Column(db.Boolean, default=True)
+    
+    # 定时推送配置
+    enable_scheduled_push = db.Column(db.Boolean, default=False)  # 是否启用定时推送
+    schedule_weekdays = db.Column(db.String(20), default='1,2,3,4,5')  # 工作日配置：1-7代表周一到周日
+    schedule_time = db.Column(db.String(10), default='09:00')  # 推送时间，格式：HH:MM（+8时区）
+    timezone = db.Column(db.String(50), default='Asia/Shanghai')  # 时区配置
+    
     last_run = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
