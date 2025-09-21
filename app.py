@@ -1254,6 +1254,48 @@ def delete_report_config(report_id):
         logger.error(f"删除报告配置失败: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/report-config/<int:report_id>/copy', methods=['POST'])
+@login_required
+def copy_report_config(report_id):
+    """复制报告配置"""
+    try:
+        # 获取原始报告配置
+        original_report = ReportConfig.query.get_or_404(report_id)
+        
+        # 创建新的报告配置
+        copied_report = ReportConfig(
+            name=f"{original_report.name} - 副本",
+            data_sources=original_report.data_sources,
+            filter_keywords=original_report.filter_keywords,
+            time_range=original_report.time_range,
+            purpose=original_report.purpose,
+            enable_deep_research=original_report.enable_deep_research,
+            research_focus=original_report.research_focus,
+            notification_type=original_report.notification_type,
+            webhook_url=original_report.webhook_url,
+            is_active=False,  # 复制的配置默认为非激活状态
+            enable_scheduled_push=original_report.enable_scheduled_push,
+            schedule_weekdays=original_report.schedule_weekdays,
+            schedule_time=original_report.schedule_time,
+            timezone=original_report.timezone
+        )
+        
+        db.session.add(copied_report)
+        db.session.commit()
+        
+        logger.info(f"成功复制报告配置: {original_report.name} -> {copied_report.name}")
+        
+        return jsonify({
+            'success': True, 
+            'message': '复制成功', 
+            'id': copied_report.id,
+            'name': copied_report.name
+        })
+    
+    except Exception as e:
+        logger.error(f"复制报告配置失败: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/report-config/<int:report_id>/history')
 @login_required
 def get_report_history(report_id):

@@ -547,6 +547,27 @@ window.deleteReport = async function deleteReport(reportId) {
     }
 }
 
+window.copyReport = async function copyReport(reportId) {
+    try {
+        const response = await fetch(`/api/report-config/${reportId}/copy`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`复制成功：${result.name}`, 'success');
+            // 延迟刷新页面以显示新的配置
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(result.message || '复制失败', 'error');
+        }
+    } catch (error) {
+        console.error('复制报告配置失败:', error);
+        showToast('复制失败，请重试', 'error');
+    }
+}
+
 // 导航函数
 window.navigateToCrawlerNew = function() {
     // 通过修改hash来触发页面切换
