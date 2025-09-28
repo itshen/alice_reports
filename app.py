@@ -42,7 +42,7 @@ jobstores = {
 scheduler = BackgroundScheduler(jobstores=jobstores)
 
 # 导入模型
-from models import GlobalSettings, CrawlerConfig, CrawlRecord, ReportConfig, ReportRecord, TaskLog
+from models import User, GlobalSettings, CrawlerConfig, CrawlRecord, ReportConfig, ReportRecord, TaskLog
 
 # 创建服务实例
 from services.crawler_service import CrawlerService
@@ -391,6 +391,18 @@ def create_tables():
     """创建数据库表"""
     db.create_all()
     
+    # 初始化默认用户
+    logger.info("正在检查默认用户...")
+    admin_user = User.query.filter_by(username='admin').first()
+    if not admin_user:
+        admin_user = User(username='admin')
+        admin_user.set_password('admin123')
+        db.session.add(admin_user)
+        db.session.commit()
+        logger.info("已创建默认管理员用户: admin/admin123")
+    else:
+        logger.info("默认管理员用户已存在")
+    
     # 初始化默认配置
     logger.info("正在初始化默认配置...")
     DefaultConfigService.init_default_configs()
@@ -427,10 +439,13 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        # 简单的硬编码认证
-        if username == 'admin' and password == 'admin123':
+        # 查找用户
+        user = User.query.filter_by(username=username, is_active=True).first()
+        
+        if user and user.check_password(password):
             session['logged_in'] = True
             session['username'] = username
+            session['user_id'] = user.id
             return redirect(url_for('dashboard'))
         else:
             flash('用户名或密码错误', 'error')
@@ -442,6 +457,55 @@ def logout():
     """退出登录"""
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/change-password')
+@login_required
+def change_password_page():
+    """修改密码页面"""
+    return render_template('change_password.html')
+
+@app.route('/api/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """修改密码API"""
+    try:
+        data = request.get_json()
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        # 验证输入
+        if not current_password or not new_password or not confirm_password:
+            return jsonify({'success': False, 'message': '所有字段都必须填写'})
+        
+        if new_password != confirm_password:
+            return jsonify({'success': False, 'message': '新密码和确认密码不匹配'})
+        
+        if len(new_password) < 6:
+            return jsonify({'success': False, 'message': '新密码长度至少6位'})
+        
+        # 获取当前用户
+        user_id = session.get('user_id')
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'success': False, 'message': '用户不存在'})
+        
+        # 验证当前密码
+        if not user.check_password(current_password):
+            return jsonify({'success': False, 'message': '当前密码错误'})
+        
+        # 更新密码
+        user.set_password(new_password)
+        db.session.commit()
+        
+        logger.info(f"用户 {user.username} 成功修改密码")
+        
+        return jsonify({'success': True, 'message': '密码修改成功'})
+    
+    except Exception as e:
+        logger.error(f"修改密码失败: {e}")
+        return jsonify({'success': False, 'message': '修改密码失败，请重试'}), 500
 
 @app.route('/dashboard')
 @login_required
